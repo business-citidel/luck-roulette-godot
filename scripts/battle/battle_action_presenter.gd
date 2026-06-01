@@ -13,6 +13,13 @@ static func build(snapshot: Dictionary) -> Dictionary:
 	match phase:
 		"dice":
 			potion_entry = _dice_buttons(snapshot, buttons)
+		"marble_choice":
+			var choices: Array = snapshot.get("revealed_marbles", [])
+			for i in range(choices.size()):
+				var marble: Dictionary = choices[i] if choices[i] is Dictionary else {}
+				var name := str(marble.get("short_name", marble.get("marble_id", "Marble")))
+				buttons.append(_button(UiText.t("battle.action.choose_marble", {"marble": name}), "_choose_revealed_marble", [i], true, i == 0))
+			potion_entry = true
 		"marble":
 			if bool(snapshot.get("marble_setup_ready", false)):
 				buttons.append(_button(UiText.t("battle.action.spin"), "_open_roulette_spin_ritual", [], true, true))
@@ -20,8 +27,11 @@ static func build(snapshot: Dictionary) -> Dictionary:
 				buttons.append(_button(UiText.t("battle.action.place_marble"), "_open_marble_throw_ritual", [], bool(snapshot.get("can_place_marble", false)), true))
 			potion_entry = true
 		"wager":
-			buttons.append(_button(UiText.t("battle.action.go"), "_adjust_wager", [1], bool(snapshot.get("can_wager_go", false)), false))
-			buttons.append(_button(UiText.t("battle.action.stop"), "_open_numeric_roulette_spin", [], true, true))
+			if bool(snapshot.get("has_selected_marble", false)):
+				buttons.append(_button(UiText.t("battle.action.spin"), "_open_numeric_roulette_spin", [], true, true))
+			else:
+				buttons.append(_button(UiText.t("battle.action.go"), "_adjust_wager", [1], bool(snapshot.get("can_wager_go", false)), false))
+				buttons.append(_button(UiText.t("battle.action.stop"), "_open_numeric_roulette_spin", [], true, true))
 		"spinning":
 			buttons.append(_button(UiText.t("battle.action.spinning"), "_noop", [], false, false))
 		"intervene":

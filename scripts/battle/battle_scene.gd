@@ -4,6 +4,8 @@ signal combat_finished(result: Dictionary)
 signal combat_overlay_changed(payload: Dictionary)
 
 const MarbleResolver := preload("res://scripts/systems/marble_resolver.gd")
+const MarbleDeckState := preload("res://scripts/resources/marble_deck_state.gd")
+const MarbleEffectResolver := preload("res://scripts/systems/marble_effect_resolver.gd")
 const RouletteResolver := preload("res://scripts/systems/roulette_resolver.gd")
 const RouletteSlotCatalog := preload("res://scripts/systems/roulette_slot_catalog.gd")
 const NumericRouletteResolver := preload("res://scripts/systems/numeric_roulette_resolver.gd")
@@ -34,6 +36,7 @@ const DiceFlow := preload("res://scripts/battle/battle_dice_flow.gd")
 const DiceRollHandoff := preload("res://scripts/battle/battle_dice_roll_handoff.gd")
 const LegacySlotFlow := preload("res://scripts/battle/battle_legacy_slot_flow.gd")
 const NumericRouletteFlow := preload("res://scripts/battle/battle_numeric_roulette_flow.gd")
+const MarbleChoiceFlow := preload("res://scripts/battle/battle_marble_choice_flow.gd")
 const RelicBridge := preload("res://scripts/battle/battle_relic_payload_bridge.gd")
 const CombatResultBuilder := preload("res://scripts/battle/battle_combat_result_builder.gd")
 const VisualFeedback := preload("res://scripts/battle/battle_visual_feedback.gd")
@@ -107,6 +110,11 @@ var marbles: Array[String] = []
 var stored: Array[String] = []
 var placed_slots: Dictionary = {}
 var selected_marble_slot_id: String = "safe"
+var marble_deck_state: Resource = MarbleDeckState.new()
+var revealed_marbles: Array[Dictionary] = []
+var selected_marble: Dictionary = {}
+var selected_marble_id: String = ""
+var hovered_marble_choice_index: int = -1
 var combat_core: String = "numeric_roulette"
 var wager_marbles_available: int = 1
 var wager_marbles_committed: int = 0
@@ -209,6 +217,7 @@ var ritual_director: Node
 func _ready() -> void:
 	seed_text = _seed_from_args()
 	rng.seed = hash(seed_text)
+	marble_deck_state.reset_starting_deck(rng)
 	_reset_slots()
 	_build_shell()
 	_build_audio_bank()
@@ -228,6 +237,11 @@ func configure_encounter(payload: Dictionary) -> void:
 	floor_index = max(1, int(payload.get("floor_index", 1)))
 	wager_marbles_available = int(payload.get("wager_marbles_available", 1 if _is_numeric_core() else 0))
 	wager_marbles_committed = 0
+	marble_deck_state.reset_starting_deck(rng)
+	revealed_marbles.clear()
+	selected_marble.clear()
+	selected_marble_id = ""
+	hovered_marble_choice_index = -1
 	numeric_roulette_index = -1
 	numeric_roulette_multiplier = 1.0
 	numeric_go_available = false
@@ -563,13 +577,17 @@ func _update_table_layer() -> void:
 		"hovered_slot_id": hovered_slot_id,
 		"hovered_spin_wheel": hovered_spin_wheel,
 		"coin_particles": coin_particles,
-		"numeric_roulette_index": numeric_roulette_index,
-		"numeric_roulette_multiplier": numeric_roulette_multiplier,
-		"wager_marbles_available": wager_marbles_available,
-		"wager_marbles_committed": wager_marbles_committed,
-		"is_numeric_core": _is_numeric_core(),
-		"marble_setup_ready": _marble_setup_ready()
-	})))
+			"numeric_roulette_index": numeric_roulette_index,
+			"numeric_roulette_multiplier": numeric_roulette_multiplier,
+			"wager_marbles_available": wager_marbles_available,
+			"wager_marbles_committed": wager_marbles_committed,
+			"revealed_marbles": revealed_marbles,
+			"selected_marble": selected_marble,
+			"hovered_marble_choice_index": hovered_marble_choice_index,
+			"marble_zone_counts": marble_deck_state.zone_counts(),
+			"is_numeric_core": _is_numeric_core(),
+			"marble_setup_ready": _marble_setup_ready()
+		})))
 
 func _update_hand_layer() -> void:
 	hand_layer.set_state(VisualSnapshots.hand_state(_visual_layer_snapshot({
@@ -819,10 +837,12 @@ func _action_presenter_snapshot() -> Dictionary:
 		"is_dice_push_rule": _is_dice_push_rule(),
 		"can_push_dice": _can_push_dice(),
 		"can_reroll": rerolls_left > 0 and not _all_dice_locked() and dice_push_count <= 0,
-		"marble_setup_ready": _marble_setup_ready(),
-		"can_place_marble": marbles.size() > 0 and not throwing_hand and thrown_marbles.is_empty(),
-		"can_wager_go": wager_marbles_committed < wager_marbles_available,
-		"is_numeric_core": _is_numeric_core(),
+			"marble_setup_ready": _marble_setup_ready(),
+			"can_place_marble": marbles.size() > 0 and not throwing_hand and thrown_marbles.is_empty(),
+			"can_wager_go": wager_marbles_committed < wager_marbles_available,
+			"revealed_marbles": revealed_marbles,
+			"has_selected_marble": not selected_marble.is_empty(),
+			"is_numeric_core": _is_numeric_core(),
 		"numeric_go_available": numeric_go_available,
 		"run_over": run_over
 	}
@@ -876,7 +896,7 @@ func _can_use_potion(potion_id: String) -> bool:
 		PotionCatalog.BLUE_DICE:
 			return phase == "dice" and dice_rolled and not dice_roll_in_progress and not _all_dice_locked()
 		PotionCatalog.WHITE_WAGER:
-			return _is_numeric_core() and phase == "wager"
+			return _is_numeric_core() and phase == "wager" and selected_marble.is_empty()
 		PotionCatalog.CYAN_TIME:
 			return _is_numeric_core() and phase in ["dice", "wager", "intervene"]
 	return false
@@ -967,6 +987,9 @@ func _render_object_inputs() -> void:
 				_object_button(rect, Callable(self, "_place_marbles_on_slot").bind(slot_id), Callable(self, "_set_hovered_slot").bind(slot_id), Callable(self, "_clear_hovered_slot").bind(slot_id))
 		elif _marble_setup_ready():
 			_object_button(_roulette_spin_rect(), Callable(self, "_open_roulette_spin_ritual"), Callable(self, "_set_hovered_spin_wheel"), Callable(self, "_clear_hovered_spin_wheel"))
+	elif phase == "marble_choice":
+		for i in range(revealed_marbles.size()):
+			_object_button(_marble_choice_rect(i), Callable(self, "_choose_revealed_marble").bind(i), Callable(self, "_set_hovered_marble_choice").bind(i), Callable(self, "_clear_hovered_marble_choice").bind(i))
 	elif phase == "wager":
 		_object_button(_roulette_spin_rect(), Callable(self, "_open_numeric_roulette_spin"), Callable(self, "_set_hovered_spin_wheel"), Callable(self, "_clear_hovered_spin_wheel"))
 
@@ -1018,6 +1041,16 @@ func _clear_hovered_spin_wheel() -> void:
 	hovered_spin_wheel = false
 	_update_visual_layers()
 
+func _set_hovered_marble_choice(index: int) -> void:
+	hovered_marble_choice_index = index
+	_update_visual_layers()
+
+func _clear_hovered_marble_choice(index: int) -> void:
+	if hovered_marble_choice_index != index:
+		return
+	hovered_marble_choice_index = -1
+	_update_visual_layers()
+
 func _action_prompt() -> String:
 	return PromptPresenter.action_prompt(_action_prompt_snapshot())
 
@@ -1030,9 +1063,10 @@ func _action_prompt_snapshot() -> Dictionary:
 		"attack_die_choice_prompt": _attack_die_choice_prompt(),
 		"thrown_marbles": thrown_marbles,
 		"marble_setup_ready": _marble_setup_ready(),
-		"wager_marbles_committed": wager_marbles_committed,
-		"wager_marbles_available": wager_marbles_available,
-		"is_numeric_core": _is_numeric_core(),
+			"wager_marbles_committed": wager_marbles_committed,
+			"wager_marbles_available": wager_marbles_available,
+			"selected_marble": selected_marble,
+			"is_numeric_core": _is_numeric_core(),
 		"numeric_roulette_multiplier": numeric_roulette_multiplier,
 		"numeric_preview_damage": _numeric_preview_damage(),
 		"run_over": run_over
@@ -1358,7 +1392,7 @@ func _take_marbles() -> void:
 	payload = RelicBridge.apply_marble_gain(payload, active_relic_ids)
 	active_relic_state = payload.get("relic_state", active_relic_state)
 	if _is_numeric_core():
-		_enter_wager_phase(max(1, int(payload.get("marble_count", 1))))
+		_enter_marble_choice_phase(payload)
 		return
 	var payload_marbles: Array[String] = _string_array(payload.get("marbles", []))
 	var count: int = max(1, int(payload.get("marble_count", payload_marbles.size())))
@@ -1382,6 +1416,55 @@ func _take_marbles() -> void:
 	marble_feedback_color = _marble_color(color)
 	marble_feedback_alpha = 1.0
 	_play_sfx("marble_drop", 1.1, -7.0)
+	_render()
+
+func _enter_marble_choice_phase(payload: Dictionary) -> void:
+	var state := MarbleChoiceFlow.enter_choice_state(marble_deck_state, rng, attack_base)
+	phase = str(state.get("phase", "marble_choice"))
+	revealed_marbles = _dictionary_array(state.get("revealed_marbles", []))
+	selected_marble = (state.get("selected_marble", {}) as Dictionary).duplicate(true)
+	selected_marble_id = str(selected_marble.get("marble_id", ""))
+	wager_marbles_available = max(0, int(payload.get("marble_count", 1)) - 1)
+	wager_marbles_committed = 0
+	numeric_roulette_index = -1
+	numeric_roulette_multiplier = 1.0
+	numeric_go_available = false
+	numeric_next_go_available = true
+	numeric_go_chances_left = 1
+	numeric_go_per_turn_cap = 999
+	numeric_pending_intervention_message = ""
+	pending_slot = ""
+	placed_slots = _normalize_slots({})
+	hovered_attack_die_index = -1
+	hovered_slot_id = ""
+	hovered_spin_wheel = false
+	hovered_marble_choice_index = -1
+	marbles.clear()
+	banner_text = str(state.get("banner_text", "MARBLE CHOICE"))
+	banner_alpha = float(state.get("banner_alpha", 1.0))
+	message = str(state.get("message", UiText.t("battle.prompt.choose_revealed_marble")))
+	_play_sfx("marble_drop", 1.05, -7.0)
+	_render()
+
+func _choose_revealed_marble(index: int) -> void:
+	if phase != "marble_choice":
+		return
+	var state := MarbleChoiceFlow.choose_state(marble_deck_state, index)
+	if not bool(state.get("valid", false)):
+		return
+	phase = str(state.get("phase", "wager"))
+	revealed_marbles = _dictionary_array(state.get("revealed_marbles", []))
+	selected_marble = (state.get("selected_marble", {}) as Dictionary).duplicate(true)
+	selected_marble_id = str(state.get("selected_marble_id", selected_marble.get("marble_id", "")))
+	wager_marbles_available = int(state.get("wager_marbles_available", 0))
+	wager_marbles_committed = int(state.get("wager_marbles_committed", 0))
+	hovered_marble_choice_index = -1
+	hovered_spin_wheel = false
+	banner_text = str(state.get("banner_text", "MARBLE READY"))
+	banner_alpha = float(state.get("banner_alpha", 1.0))
+	message = str(state.get("message", UiText.t("battle.prompt.selected_marble_spin", {"marble": selected_marble.get("short_name", selected_marble_id)})))
+	_sync_wager_marbles_visual()
+	_play_sfx("marble_drop", 1.14, -6.0)
 	_render()
 
 func _enter_wager_phase(gained_marbles: int = 1) -> void:
@@ -1750,6 +1833,7 @@ func _open_numeric_roulette_spin() -> void:
 		NumericRouletteFlow.roulette_before_spin_payload(_numeric_flow_snapshot({"seed": rng.randi()})),
 		active_relic_ids
 	)
+	payload = MarbleEffectResolver.apply_before_spin(payload)
 	active_relic_state = payload.get("relic_state", active_relic_state)
 	_show_feedback_from_effects(payload.get("applied_effects", []), "roulette")
 	var spin_result := _numeric_spin_result(payload)
@@ -1828,8 +1912,13 @@ func _numeric_preview_damage() -> int:
 		"wager_multiplier": NumericRouletteResolver.wager_multiplier(wager_marbles_committed),
 		"wager_marbles_committed": wager_marbles_committed,
 		"damage_multiplier": damage_multiplier,
-		"payout_multiplier": damage_multiplier
+		"payout_multiplier": damage_multiplier,
+		"dice_values": dice.duplicate(),
+		"selected_marble": selected_marble,
+		"selected_marble_id": selected_marble_id,
+		"applied_effects": []
 	})
+	payload = MarbleEffectResolver.apply_resolution_payload(payload)
 	var attack_value: int = int(payload.get("attack_base", _effective_attack_base()))
 	var resolved_damage_multiplier: float = max(0.0, float(payload.get("damage_multiplier", damage_multiplier)))
 	var flat_bonus: int = _pending_jackpot_damage_bonus()
@@ -1874,9 +1963,11 @@ func _numeric_flow_snapshot(extra: Dictionary = {}) -> Dictionary:
 		"player_damage_multiplier": player_damage_multiplier,
 		"pending_slot": pending_slot,
 		"numeric_roulette_multiplier": numeric_roulette_multiplier,
-		"wager_marbles_committed": wager_marbles_committed,
-		"wager_marbles_available": wager_marbles_available,
-		"numeric_go_used_this_spin": numeric_go_used_this_spin,
+			"wager_marbles_committed": wager_marbles_committed,
+			"wager_marbles_available": wager_marbles_available,
+			"selected_marble": selected_marble,
+			"selected_marble_id": selected_marble_id,
+			"numeric_go_used_this_spin": numeric_go_used_this_spin,
 		"numeric_go_chances_left": numeric_go_chances_left,
 		"numeric_go_per_turn_cap": numeric_go_per_turn_cap,
 		"numeric_go_available": numeric_go_available,
@@ -2095,8 +2186,10 @@ func _resolve_numeric_pending() -> void:
 	active_relic_state = payload.get("relic_state", active_relic_state)
 	_show_feedback_from_effects(payload.get("applied_effects", []), "resolution_payload")
 	payload = _apply_resolution_run_upgrades(payload)
+	payload = MarbleEffectResolver.apply_resolution_payload(payload)
 	var jackpot_bonus := _pending_jackpot_damage_bonus()
 	var outcome: Dictionary = NumericRouletteFlow.resolution_outcome(payload, snapshot, jackpot_bonus)
+	outcome = MarbleEffectResolver.apply_outcome(outcome)
 	outcome["relic_state"] = active_relic_state
 	var after_outcome := RelicBridge.apply_resolution_after(outcome, active_relic_ids)
 	if jackpot_bonus > 0:
@@ -2118,10 +2211,20 @@ func _apply_resolution_outcome(outcome: Dictionary) -> void:
 	for cue in result_cue.get("audio_cues", []):
 		_play_feedback_audio_cue(cue)
 
-	_apply_resolution_state_patch(ResolutionOutcomeFlow.state_patch(_resolution_state_snapshot(), outcome))
-	_render()
-	_show_feedback_from_effects(last_applied_effects, "resolution_result")
-	_emit_combat_finished_if_ready("resolution")
+		_apply_resolution_state_patch(ResolutionOutcomeFlow.state_patch(_resolution_state_snapshot(), outcome))
+		_finish_selected_marble_turn()
+		_render()
+		_show_feedback_from_effects(last_applied_effects, "resolution_result")
+		_emit_combat_finished_if_ready("resolution")
+
+func _finish_selected_marble_turn() -> void:
+	if selected_marble_id == "":
+		return
+	marble_deck_state.finish_selected(rng)
+	selected_marble.clear()
+	selected_marble_id = ""
+	revealed_marbles.clear()
+	hovered_marble_choice_index = -1
 
 func _resolution_state_snapshot() -> Dictionary:
 	return {
@@ -2270,6 +2373,10 @@ func _next_turn() -> void:
 	player_block = 0
 	black_signer_contract_id = ""
 	selected_marble_slot_id = RouletteSlotCatalog.fallback_id()
+	revealed_marbles.clear()
+	selected_marble.clear()
+	selected_marble_id = ""
+	hovered_marble_choice_index = -1
 	if _is_numeric_core():
 		wager_marbles_available += 1
 		wager_marbles_committed = 0
@@ -2574,6 +2681,8 @@ func _is_numeric_core() -> bool:
 func _phase_title() -> String:
 	if phase == "dice":
 		return UiText.t("battle.phase.dice")
+	if phase == "marble_choice":
+		return UiText.t("battle.phase.marble_choice")
 	if phase == "marble":
 		return UiText.t("battle.phase.marble")
 	if phase == "wager":
@@ -2627,6 +2736,18 @@ func _hand_rect() -> Rect2:
 
 func _roulette_spin_rect() -> Rect2:
 	return Rect2(Vector2(440, 160), Vector2(400, 400))
+
+func _marble_choice_rect(index: int) -> Rect2:
+	return Rect2(Vector2(820, 176 + float(index) * 106.0), Vector2(292, 92))
+
+func _dictionary_array(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if not value is Array:
+		return result
+	for item in value:
+		if item is Dictionary:
+			result.append((item as Dictionary).duplicate(true))
+	return result
 
 func _hand_marble_pos(index: int) -> Vector2:
 	return Vector2(1012 + float(index % 3) * 18.0, 570 + floor(float(index) / 3.0) * 18.0)

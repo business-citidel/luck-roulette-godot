@@ -24,7 +24,11 @@ static func table_state(snapshot: Dictionary) -> Dictionary:
 		"numeric_roulette_index": int(snapshot.get("numeric_roulette_index", -1)),
 		"numeric_roulette_multiplier": float(snapshot.get("numeric_roulette_multiplier", 1.0)),
 		"wager_marbles_available": int(snapshot.get("wager_marbles_available", 0)),
-		"wager_marbles_committed": int(snapshot.get("wager_marbles_committed", 0))
+		"wager_marbles_committed": int(snapshot.get("wager_marbles_committed", 0)),
+		"revealed_marbles": snapshot.get("revealed_marbles", []),
+		"selected_marble": snapshot.get("selected_marble", {}),
+		"hovered_marble_choice_index": int(snapshot.get("hovered_marble_choice_index", -1)),
+		"marble_zone_counts": snapshot.get("marble_zone_counts", {})
 	}
 
 static func hand_state(snapshot: Dictionary) -> Dictionary:
@@ -109,7 +113,7 @@ static func overlay_payload(snapshot: Dictionary) -> Dictionary:
 
 static func camera_beat(snapshot: Dictionary) -> String:
 	var phase := str(snapshot.get("phase", ""))
-	if phase == "dice" or phase == "wager":
+	if phase == "dice" or phase == "wager" or phase == "marble_choice":
 		return "wide_table"
 	if phase == "marble":
 		if bool(snapshot.get("throwing_hand", false)) or not (snapshot.get("thrown_marbles", []) as Array).is_empty():

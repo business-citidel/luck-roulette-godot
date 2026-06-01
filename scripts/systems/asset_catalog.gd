@@ -184,7 +184,19 @@ const COMBAT_RUNTIME_TEXTURES := {
 	"marble_plain": COMBAT_RUNTIME_BASE_PATH + "marbles/marble_plain.png",
 	"marble_yellow": COMBAT_RUNTIME_BASE_PATH + "marbles/marble_star.png",
 	"marble_green": COMBAT_RUNTIME_BASE_PATH + "marbles/marble_guard.png",
-	"marble_curse": COMBAT_RUNTIME_BASE_PATH + "marbles/marble_skull.png"
+	"marble_curse": COMBAT_RUNTIME_BASE_PATH + "marbles/marble_skull.png",
+	"marble_plain_v2": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_plain_001.png",
+	"marble_heavy": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_heavy_001.png",
+	"marble_leech": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_leech_001.png",
+	"marble_guard_v2": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_guard_001.png",
+	"marble_pierce": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_pierce_001.png",
+	"marble_gamble": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_gamble_001.png",
+	"marble_stable": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_stable_001.png",
+	"marble_poison": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_poison_001.png",
+	"marble_cracked": COMBAT_RUNTIME_BASE_PATH + "marbles/v2/marble_cracked_001.png",
+	"marble_choice_tray": COMBAT_RUNTIME_BASE_PATH + "marbles/ui/marble_choice_tray_empty_candidate.png",
+	"marble_bag_overlay_board": COMBAT_RUNTIME_BASE_PATH + "marbles/ui/marble_bag_overlay_board_empty_candidate.png",
+	"marble_quick_view_slot": COMBAT_RUNTIME_BASE_PATH + "marbles/ui/marble_quick_view_slot_empty_candidate.png"
 }
 
 const SHOP_RUNTIME_BASE_PATH := "res://assets/runtime/shop/"
@@ -675,6 +687,10 @@ static func dice_motion_result_texture(value: int) -> Texture2D:
 	return texture
 
 static func marble_texture(color: String) -> Texture2D:
+	if COMBAT_RUNTIME_TEXTURES.has(color):
+		var typed := combat_runtime_texture(color)
+		if typed != null:
+			return typed
 	if color == "plain":
 		var plain := combat_runtime_texture("marble_plain")
 		if plain != null:

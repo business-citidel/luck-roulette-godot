@@ -19,7 +19,14 @@ static func action_prompt(snapshot: Dictionary) -> String:
 		if bool(snapshot.get("marble_setup_ready", false)):
 			return UiText.t("battle.message.click_spin")
 		return UiText.t("battle.message.click_marble_slot")
+	if phase == "marble_choice":
+		return UiText.t("battle.prompt.choose_revealed_marble")
 	if phase == "wager":
+		var selected: Dictionary = snapshot.get("selected_marble", {})
+		if not selected.is_empty():
+			return UiText.t("battle.prompt.selected_marble_spin", {
+				"marble": str(selected.get("short_name", selected.get("marble_id", "Marble")))
+			})
 		var committed := int(snapshot.get("wager_marbles_committed", 0))
 		return UiText.t("battle.prompt.wager", {
 			"committed": committed,

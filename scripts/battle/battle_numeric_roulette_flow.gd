@@ -19,13 +19,15 @@ static func roulette_before_spin_payload(snapshot: Dictionary) -> Dictionary:
 		"roulette_multiplier": float(snapshot.get("numeric_roulette_multiplier", 1.0)),
 		"relic_state": snapshot.get("relic_state", {}),
 		"seed": int(snapshot.get("seed", 0)),
-		"wheel_angle": float(snapshot.get("wheel_angle", 0.0))
+		"wheel_angle": float(snapshot.get("wheel_angle", 0.0)),
+		"selected_marble": snapshot.get("selected_marble", {}),
+		"selected_marble_id": str(snapshot.get("selected_marble_id", ""))
 	}
 
 static func open_spin_state(snapshot: Dictionary, spin_payload: Dictionary, spin_result: Dictionary) -> Dictionary:
 	var committed := int(snapshot.get("wager_marbles_committed", 0))
 	var state := spin_state(spin_result, committed)
-	var go_cap: int = max(1, int(spin_payload.get("numeric_go_per_turn_cap", 999)))
+	var go_cap: int = max(0, int(spin_payload.get("numeric_go_per_turn_cap", 999)))
 	var go_chances: int = 1 + max(0, int(spin_payload.get("numeric_extra_go_chances", 0))) + int(snapshot.get("potion_extra_go_chances", 0))
 	go_chances = min(go_chances, go_cap)
 	return {
@@ -67,6 +69,8 @@ static func roulette_after_spin_payload(snapshot: Dictionary) -> Dictionary:
 		"wager_marbles_committed": int(snapshot.get("wager_marbles_committed", 0)),
 		"wager_marbles_available": int(snapshot.get("wager_marbles_available", 0)),
 		"relic_state": snapshot.get("relic_state", {}),
+		"selected_marble": snapshot.get("selected_marble", {}),
+		"selected_marble_id": str(snapshot.get("selected_marble_id", "")),
 		"applied_effects": []
 	}
 
@@ -157,6 +161,8 @@ static func resolution_before_payload(snapshot: Dictionary) -> Dictionary:
 		"flat_damage_bonus": 0,
 		"cash_delta_bonus": 0,
 		"placed_slots": snapshot.get("placed_slots", {}),
+		"selected_marble": snapshot.get("selected_marble", {}),
+		"selected_marble_id": str(snapshot.get("selected_marble_id", "")),
 		"relic_state": snapshot.get("relic_state", {})
 	}
 
@@ -203,6 +209,8 @@ static func resolution_outcome(payload: Dictionary, snapshot: Dictionary, jackpo
 		"wager_marbles_available": int(payload.get("wager_marbles_available", snapshot.get("wager_marbles_available", 0))),
 		"roulette_go_used": bool(payload.get("roulette_go_used", snapshot.get("numeric_go_used_this_spin", false))),
 		"placed_slots": snapshot.get("placed_slots", {}),
+		"selected_marble": payload.get("selected_marble", snapshot.get("selected_marble", {})),
+		"selected_marble_id": str(payload.get("selected_marble_id", snapshot.get("selected_marble_id", ""))),
 		"relic_state": snapshot.get("relic_state", {}),
 		"banner": "HIT " + str(damage) if damage > 0 else "NO DAMAGE",
 		"message": UiText.t("battle.message.numeric_damage", {

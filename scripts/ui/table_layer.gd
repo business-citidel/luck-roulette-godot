@@ -2,6 +2,7 @@ class_name TableLayer
 extends Control
 
 const AssetCatalog := preload("res://scripts/systems/asset_catalog.gd")
+const MarbleCatalog := preload("res://scripts/systems/marble_catalog.gd")
 const RouletteSlotCatalog := preload("res://scripts/systems/roulette_slot_catalog.gd")
 const UiText := preload("res://scripts/ui/ui_text.gd")
 
@@ -34,6 +35,10 @@ var numeric_roulette_index: int = -1
 var numeric_roulette_multiplier: float = 0.0
 var wager_marbles_available: int = 0
 var wager_marbles_committed: int = 0
+var revealed_marbles: Array = []
+var selected_marble: Dictionary = {}
+var hovered_marble_choice_index: int = -1
+var marble_zone_counts: Dictionary = {}
 
 func _ready() -> void:
 	size = Vector2(1280, 720)
@@ -60,12 +65,17 @@ func set_state(next_state: Dictionary) -> void:
 	numeric_roulette_multiplier = float(next_state.get("numeric_roulette_multiplier", numeric_roulette_multiplier))
 	wager_marbles_available = int(next_state.get("wager_marbles_available", wager_marbles_available))
 	wager_marbles_committed = int(next_state.get("wager_marbles_committed", wager_marbles_committed))
+	revealed_marbles = next_state.get("revealed_marbles", revealed_marbles).duplicate(true)
+	selected_marble = (next_state.get("selected_marble", selected_marble) as Dictionary).duplicate(true)
+	hovered_marble_choice_index = int(next_state.get("hovered_marble_choice_index", hovered_marble_choice_index))
+	marble_zone_counts = (next_state.get("marble_zone_counts", marble_zone_counts) as Dictionary).duplicate(true)
 	queue_redraw()
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2(-1600, -1200), Vector2(4480, 3120)), BG, true)
 	_draw_backdrop()
 	_draw_roulette_area()
+	_draw_marble_choice_area()
 	_draw_coin_particles()
 
 func _draw_backdrop() -> void:
@@ -141,6 +151,57 @@ func _draw_roulette_area() -> void:
 		_label_draw(UiText.t("battle.layer.click_roulette") if hovered_spin_wheel else UiText.t("battle.layer.setup_done"), center + Vector2(-34, -222), 16, GOLD)
 	if has_numeric_roulette and (active_phase == "wager" or active_phase == "intervene"):
 		_draw_numeric_wager_status(center)
+
+func _draw_marble_choice_area() -> void:
+	if active_phase == "marble_choice":
+		_draw_revealed_marble_choices()
+	elif active_phase == "wager" and not selected_marble.is_empty():
+		_draw_selected_marble_badge()
+
+func _draw_revealed_marble_choices() -> void:
+	var counts := "Bag %d | Discard %d | Deck %d/%d" % [
+		int(marble_zone_counts.get("bag", 0)),
+		int(marble_zone_counts.get("discard", 0)),
+		int(marble_zone_counts.get("all", 0)),
+		MarbleCatalog.MAX_DECK_SIZE
+	]
+	_label_draw(counts, Vector2(838, 154), 13, MUTED)
+	for i in range(revealed_marbles.size()):
+		var marble: Dictionary = revealed_marbles[i]
+		var rect := _marble_choice_rect(i)
+		var hovered := hovered_marble_choice_index == i
+		_draw_marble_choice_card(rect, marble, hovered)
+
+func _draw_marble_choice_card(rect: Rect2, marble: Dictionary, hovered: bool) -> void:
+	var fill := Color("#0a0d12", 0.88)
+	draw_rect(rect, fill, true)
+	draw_rect(rect, Color(GOLD, 0.88 if hovered else 0.36), false, 3.0 if hovered else 2.0)
+	if hovered:
+		draw_rect(rect.grow(-5.0), Color(GOLD, 0.08), true)
+	var marble_id := str(marble.get("marble_id", "plain"))
+	var texture: Texture2D = AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
+	var image_rect := Rect2(rect.position + Vector2(14, 16), Vector2(62, 62))
+	if texture != null:
+		draw_texture_rect(texture, image_rect, false)
+	else:
+		draw_circle(image_rect.get_center(), 27.0, Color("#e8e0cf"))
+	_label_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(86, 30), 18, TEXT)
+	_fit_label_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(86, 55), 12, MUTED, rect.size.x - 100.0)
+
+func _draw_selected_marble_badge() -> void:
+	var rect := Rect2(Vector2(842, 206), Vector2(248, 92))
+	draw_rect(rect, Color("#080b10", 0.82), true)
+	draw_rect(rect, Color(GOLD, 0.56), false, 2.0)
+	var marble_id := str(selected_marble.get("marble_id", "plain"))
+	var texture: Texture2D = AssetCatalog.marble_texture(str(selected_marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
+	if texture != null:
+		draw_texture_rect(texture, Rect2(rect.position + Vector2(14, 16), Vector2(60, 60)), false)
+	_label_draw("Selected", rect.position + Vector2(86, 27), 12, MUTED)
+	_label_draw(str(selected_marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(86, 51), 18, TEXT)
+	_fit_label_draw(str(selected_marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(86, 74), 11, GOLD, rect.size.x - 100.0)
+
+func _marble_choice_rect(index: int) -> Rect2:
+	return Rect2(Vector2(820, 176 + float(index) * 106.0), Vector2(292, 92))
 
 func _draw_numeric_roulette(center: Vector2, radius: float) -> void:
 	draw_circle(center + Vector2(18, 28), 242.0, Color("#020304", 0.35))
@@ -302,6 +363,25 @@ func _sector(center: Vector2, radius: float, start_angle: float, end_angle: floa
 
 func _label_draw(text: String, pos: Vector2, font_size: int, color: Color) -> void:
 	draw_string(ThemeDB.fallback_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, color)
+
+func _fit_label_draw(text: String, pos: Vector2, font_size: int, color: Color, max_width: float) -> void:
+	var fitted := _fit_text(text, font_size, max_width)
+	draw_string(ThemeDB.fallback_font, pos, fitted, HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size, color)
+
+func _fit_text(text: String, font_size: int, max_width: float) -> String:
+	if _text_width(text, font_size) <= max_width:
+		return text
+	var suffix: String = "..."
+	var available: int = max(0, text.length() - suffix.length())
+	while available > 0:
+		var candidate: String = text.substr(0, available).strip_edges() + suffix
+		if _text_width(candidate, font_size) <= max_width:
+			return candidate
+		available -= 1
+	return suffix
+
+func _text_width(text: String, font_size: int) -> float:
+	return ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 
 func _label_size(text: String, font_size: int) -> Vector2:
 	return ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)

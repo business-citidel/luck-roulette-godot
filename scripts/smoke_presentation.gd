@@ -13,6 +13,7 @@ func _initialize() -> void:
 	root.add_child(main)
 	root.size = Vector2i(1280, 720)
 	await process_frame
+	main.set("combat_core", "legacy_slot")
 
 	var failures: Array[String] = []
 	if main.world_root == null:

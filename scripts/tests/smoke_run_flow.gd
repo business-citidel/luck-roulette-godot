@@ -225,14 +225,20 @@ func _drive_combat_to_victory(combat: Control) -> void:
 		await _settle(8)
 	combat.set("attack_base", 120)
 	if str(combat.get("combat_core")) == "numeric_roulette":
-		if str(combat.get("phase")) != "wager":
+		if str(combat.get("phase")) != "wager" and str(combat.get("phase")) != "marble_choice":
 			combat._take_marbles()
+		if str(combat.get("phase")) == "marble_choice":
+			combat._choose_revealed_marble(0)
+			await _settle(4)
 		combat.set("numeric_forced_indices", [9])
 		while int(combat.get("wager_marbles_committed")) < int(combat.get("wager_marbles_available")):
 			_press_button_by_text(combat, "Go", "run flow wager Go")
-			await _settle(1)
+		await _settle(1)
 		await _settle(4)
-		_press_button_by_text(combat, "Stop", "run flow roulette spin")
+		if str(combat.get("selected_marble_id")) != "":
+			_press_button_by_any_text(combat, ["Spin", "돌리기"], "run flow selected marble spin")
+		else:
+			_press_button_by_text(combat, "Stop", "run flow roulette spin")
 		await _wait_for_combat_phase(combat, "intervene", 1200)
 		if str(combat.phase) != "intervene":
 			failures.append("numeric roulette spin failed in run combat")
@@ -359,6 +365,15 @@ func _press_button_by_text(combat: Control, text: String, context: String) -> vo
 	var result: String = GoStopButtonDriver.press_button_by_text(combat, text)
 	if result != "":
 		failures.append(context + " action " + text + " was " + result)
+
+func _press_button_by_any_text(combat: Control, texts: Array[String], context: String) -> void:
+	var results: Array[String] = []
+	for text in texts:
+		var result: String = GoStopButtonDriver.press_button_by_text(combat, text)
+		if result == "":
+			return
+		results.append(text + ":" + result)
+	failures.append(context + " actions were " + ", ".join(results))
 
 func _wait_for_terminal_phase(run_root: Control, expected: String, max_frames: int) -> void:
 	for i in range(max_frames):
