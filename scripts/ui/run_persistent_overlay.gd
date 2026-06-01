@@ -377,8 +377,6 @@ func _draw_marble_on_gallery_card(rect: Rect2, marble: Dictionary) -> void:
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
 	var icon_rect := Rect2(rect.position + Vector2((rect.size.x - 78.0) * 0.5, 15.0), Vector2(78, 78))
-	draw_circle(icon_rect.get_center() + Vector2(0, 5), 34.0, Color("#020304", 0.34))
-	draw_circle(icon_rect.get_center(), 34.0, Color("#3b2a1a", 0.16))
 	if texture != null:
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
@@ -400,7 +398,6 @@ func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
 	var icon_rect := Rect2(rect.position + Vector2(114, 60), Vector2(92, 92))
-	draw_circle(icon_rect.get_center() + Vector2(0, 7), 38.0, Color("#2a1709", 0.18))
 	if texture != null:
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
