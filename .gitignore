@@ -1,0 +1,21 @@
+# Godot generated files
+.godot/
+.import/
+
+# Build and export output
+build/
+builds/
+export/
+exports/
+dist/
+
+# Local run captures and temporary files
+runs/
+*.tmp
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

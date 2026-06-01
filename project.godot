@@ -1,0 +1,26 @@
+; Engine configuration file.
+; Edit through the Godot editor when possible.
+
+config_version=5
+
+[application]
+
+config/name="Luck Roulette Godot"
+run/main_scene="res://scenes/run/run_root.tscn"
+config/features=PackedStringArray("4.6")
+config/icon="res://icon.svg"
+
+[autoload]
+
+SaveSystem="*res://addons/save_system/save_system.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
