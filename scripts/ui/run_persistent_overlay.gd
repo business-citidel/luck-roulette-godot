@@ -27,9 +27,14 @@ const RELIC_ROW_RECT := Rect2(Vector2(44, 82), Vector2(760, 46))
 const DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(360, 72))
 const COMBAT_DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(330, 70))
 const PROCEED_RECT := Rect2(Vector2(1104, 636), Vector2(126, 56))
-const MARBLE_GALLERY_RECT := Rect2(Vector2(134, 86), Vector2(1012, 570))
-const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(994, 590), Vector2(112, 44))
-const MARBLE_GALLERY_SLOT_SIZE := Vector2(94, 94)
+const MARBLE_GALLERY_RECT := Rect2(Vector2(84, 74), Vector2(1112, 592))
+const MARBLE_GALLERY_INNER_RECT := Rect2(Vector2(116, 112), Vector2(1048, 512))
+const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(996, 598), Vector2(132, 44))
+const MARBLE_GALLERY_CARD_ORIGIN := Vector2(134, 176)
+const MARBLE_GALLERY_CARD_SIZE := Vector2(146, 126)
+const MARBLE_GALLERY_CARD_GAP := Vector2(20, 22)
+const MARBLE_GALLERY_COLUMNS := 4
+const MARBLE_GALLERY_DETAIL_RECT := Rect2(Vector2(834, 154), Vector2(318, 402))
 
 var run_payload: Dictionary = {}
 var phase := ""
@@ -329,29 +334,28 @@ func _draw_marble_gallery() -> void:
 	if not marble_gallery_open:
 		return
 	draw_rect(Rect2(Vector2.ZERO, size), Color("#020306", 0.54), true)
-	var board_texture := AssetCatalog.combat_runtime_texture("marble_bag_overlay_board")
-	if board_texture != null:
-		draw_texture_rect(board_texture, MARBLE_GALLERY_RECT, false, Color(1, 1, 1, 0.96))
-	else:
-		draw_rect(MARBLE_GALLERY_RECT, Color("#090b0f", 0.94), true)
-		draw_rect(MARBLE_GALLERY_RECT, Color("#8a6a3a", 0.72), false, 2.0)
+	UiSkin.draw_table_stage(self, MARBLE_GALLERY_RECT, MARBLE_GALLERY_INNER_RECT, Color(1, 1, 1, 0.96))
 	var marbles := _marble_deck_items()
-	_draw_text(UiText.t("overlay.marble_gallery.title"), MARBLE_GALLERY_RECT.position + Vector2(182, 72), 24, TEXT)
-	_draw_text(UiText.t("overlay.marble_gallery.count", {"count": marbles.size(), "max": MarbleCatalog.MAX_DECK_SIZE}), MARBLE_GALLERY_RECT.position + Vector2(184, 96), 13, Color(TEXT, 0.68))
-	if marbles.is_empty():
-		_draw_text(UiText.t("overlay.marble_gallery.empty"), MARBLE_GALLERY_RECT.position + Vector2(42, 146), 18, Color(TEXT, 0.62))
-		return
-	for i in range(min(marbles.size(), MarbleCatalog.MAX_DECK_SIZE)):
-		_draw_marble_gallery_slot(_marble_gallery_slot_rect(i), marbles[i] as Dictionary, i == hovered_marble_gallery_index)
+	_draw_text(UiText.t("overlay.marble_gallery.title"), MARBLE_GALLERY_RECT.position + Vector2(54, 70), 30, TEXT)
+	_draw_text(UiText.t("overlay.marble_gallery.count", {"count": marbles.size(), "max": MarbleCatalog.MAX_DECK_SIZE}), MARBLE_GALLERY_RECT.position + Vector2(56, 100), 14, Color(TEXT, 0.68))
 	_draw_marble_gallery_detail(_hovered_marble(marbles))
+	if marbles.is_empty():
+		_draw_text(UiText.t("overlay.marble_gallery.empty"), MARBLE_GALLERY_RECT.position + Vector2(68, 162), 18, Color(TEXT, 0.62))
+		return
+	for i in range(MarbleCatalog.MAX_DECK_SIZE):
+		var rect := _marble_gallery_slot_rect(i)
+		if i >= marbles.size():
+			_draw_empty_marble_gallery_card(rect)
+		else:
+			_draw_marble_gallery_card(rect, marbles[i] as Dictionary, i == hovered_marble_gallery_index)
 
-func _draw_marble_gallery_slot(rect: Rect2, marble: Dictionary, hovered: bool) -> void:
-	var center := rect.get_center()
-	draw_circle(center + Vector2(0, 3), 38.0, Color("#020304", 0.42))
-	draw_circle(center, 37.0, Color("#140f0a", 0.46))
-	draw_circle(center, 39.0, Color(GOLD, 0.55 if hovered else 0.20), false, 2.5 if hovered else 1.4)
+func _draw_marble_gallery_card(rect: Rect2, marble: Dictionary, hovered: bool) -> void:
+	draw_rect(rect, Color("#0a0d12", 0.84), true)
+	draw_rect(rect, Color(GOLD, 0.64 if hovered else 0.24), false, 2.5 if hovered else 1.2)
 	if hovered:
-		draw_circle(center, 48.0, Color(GOLD, 0.15), false, 4.0)
+		draw_rect(rect.grow(-7.0), Color("#fff0b8", 0.16), false, 2.0)
+	var center := rect.position + Vector2(rect.size.x * 0.5, 44.0)
+	draw_circle(center + Vector2(0, 3), 36.0, Color("#020304", 0.36))
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
 	var icon_rect := Rect2(center - Vector2(35, 35), Vector2(70, 70))
@@ -359,23 +363,37 @@ func _draw_marble_gallery_slot(rect: Rect2, marble: Dictionary, hovered: bool) -
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
 		draw_circle(icon_rect.get_center(), 32.0, Color("#e8e0cf"))
+	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), Rect2(rect.position + Vector2(12, 86), Vector2(rect.size.x - 24, 24)).position, 15, TEXT, rect.size.x - 24.0)
+	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), Rect2(rect.position + Vector2(12, 108), Vector2(rect.size.x - 24, 16)).position, 10, Color(TEXT, 0.58), rect.size.x - 24.0)
+
+func _draw_empty_marble_gallery_card(rect: Rect2) -> void:
+	draw_rect(rect, Color("#090704", 0.34), true)
+	draw_rect(rect, Color(GOLD, 0.12), false, 1.0)
+	draw_circle(rect.position + Vector2(rect.size.x * 0.5, 44.0), 30.0, Color("#080b0d", 0.28))
+	draw_circle(rect.position + Vector2(rect.size.x * 0.5, 44.0), 32.0, Color(TEXT, 0.12), false, 1.0)
 
 func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	var rect := _marble_gallery_detail_rect()
-	draw_rect(rect, Color("#090b0f", 0.30), true)
-	draw_rect(rect, Color(GOLD, 0.20), false, 1.3)
+	var texture_panel := AssetCatalog.shell_gallery_texture("detail_panel")
+	if texture_panel != null:
+		draw_texture_rect(texture_panel, rect, false, Color(1, 1, 1, 0.94))
+	else:
+		UiSkin.draw_parchment_card(self, rect, "large", Color(1, 1, 1, 0.94))
 	if marble.is_empty():
 		return
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
-	var icon_rect := Rect2(rect.position + Vector2(20, 24), Vector2(86, 86))
+	var icon_rect := Rect2(rect.position + Vector2(116, 52), Vector2(86, 86))
 	if texture != null:
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
 		draw_circle(icon_rect.get_center(), 40.0, Color("#e8e0cf"))
-	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(126, 52), 24, TEXT, rect.size.x - 150.0)
-	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(126, 82), 13, Color(TEXT, 0.62), rect.size.x - 150.0)
-	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(22, 152), 17, GOLD, rect.size.x - 44.0)
+	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(34, 176), 25, Color("#120b05"), rect.size.x - 68.0)
+	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(34, 212), 14, Color("#3f2b17"), rect.size.x - 68.0)
+	var effect_rect := Rect2(rect.position + Vector2(30, 252), Vector2(rect.size.x - 60, 42))
+	draw_rect(effect_rect, Color("#1d1208", 0.14), true)
+	draw_rect(effect_rect, Color("#7c5819", 0.22), false, 1.0)
+	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), effect_rect.position + Vector2(12, 27), 16, Color("#2b1806"), effect_rect.size.x - 24.0)
 
 func _relic_icon_rects() -> Array[Dictionary]:
 	var relic_ids: Array = run_payload.get("relic_ids", [])
@@ -428,33 +446,18 @@ func _hovered_marble(marbles: Array[Dictionary]) -> Dictionary:
 	return marbles[hovered_marble_gallery_index].duplicate(true)
 
 func _marble_gallery_grid_rect() -> Rect2:
-	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(96, 148), Vector2(486, 350))
+	return Rect2(MARBLE_GALLERY_CARD_ORIGIN, Vector2(4.0 * MARBLE_GALLERY_CARD_SIZE.x + 3.0 * MARBLE_GALLERY_CARD_GAP.x, 3.0 * MARBLE_GALLERY_CARD_SIZE.y + 2.0 * MARBLE_GALLERY_CARD_GAP.y))
 
 func _marble_gallery_detail_rect() -> Rect2:
-	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(626, 156), Vector2(286, 286))
+	return MARBLE_GALLERY_DETAIL_RECT
 
 func _marble_gallery_slot_rect(index: int) -> Rect2:
-	var centers := _marble_gallery_slot_centers()
-	if index < 0 or index >= centers.size():
+	if index < 0 or index >= MarbleCatalog.MAX_DECK_SIZE:
 		return Rect2()
-	var center: Vector2 = MARBLE_GALLERY_RECT.position + centers[index]
-	return Rect2(center - MARBLE_GALLERY_SLOT_SIZE * 0.5, MARBLE_GALLERY_SLOT_SIZE)
-
-func _marble_gallery_slot_centers() -> Array[Vector2]:
-	return [
-		Vector2(162, 203),
-		Vector2(284, 203),
-		Vector2(406, 203),
-		Vector2(528, 203),
-		Vector2(162, 324),
-		Vector2(284, 324),
-		Vector2(406, 324),
-		Vector2(528, 324),
-		Vector2(162, 445),
-		Vector2(284, 445),
-		Vector2(406, 445),
-		Vector2(528, 445)
-	]
+	var col := index % MARBLE_GALLERY_COLUMNS
+	var row := int(floor(float(index) / float(MARBLE_GALLERY_COLUMNS)))
+	var offset := Vector2(float(col) * (MARBLE_GALLERY_CARD_SIZE.x + MARBLE_GALLERY_CARD_GAP.x), float(row) * (MARBLE_GALLERY_CARD_SIZE.y + MARBLE_GALLERY_CARD_GAP.y))
+	return Rect2(MARBLE_GALLERY_CARD_ORIGIN + offset, MARBLE_GALLERY_CARD_SIZE)
 
 func _marble_gallery_index_at(pos: Vector2) -> int:
 	var marbles := _marble_deck_items()
