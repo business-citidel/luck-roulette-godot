@@ -406,8 +406,6 @@ func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	ShellText.draw_fit(self, str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), Rect2(rect.position + Vector2(34, 176), Vector2(rect.size.x - 68, 34)), 24, Color("#120b05"), 15, HORIZONTAL_ALIGNMENT_LEFT, "heading")
 	ShellText.draw_fit(self, str(marble.get("role", MarbleCatalog.role_text(marble_id))), Rect2(rect.position + Vector2(34, 214), Vector2(rect.size.x - 68, 24)), 14, Color("#3f2b17"), 10, HORIZONTAL_ALIGNMENT_LEFT, "bold")
 	var effect_rect := Rect2(rect.position + Vector2(30, 258), Vector2(rect.size.x - 60, 74))
-	draw_rect(effect_rect, Color("#1d1208", 0.14), true)
-	draw_rect(effect_rect, Color("#7c5819", 0.22), false, 1.0)
 	ShellText.draw_fit(self, str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), Rect2(effect_rect.position + Vector2(12, 13), Vector2(effect_rect.size.x - 24, 24)), 16, Color("#2b1806"), 10, HORIZONTAL_ALIGNMENT_LEFT, "bold")
 
 func _draw_normalized_marble_texture(texture: Texture2D, rect: Rect2) -> void:
