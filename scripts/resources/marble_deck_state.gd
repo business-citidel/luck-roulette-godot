@@ -85,8 +85,12 @@ func instances_for_zone(zone: String) -> Array[Dictionary]:
 		"revealed":
 			return _instances_from_ids(revealed)
 		"selected":
-			return [selected_instance()] if selected != "" else []
-	return []
+			var selected_result: Array[Dictionary] = []
+			if selected != "":
+				selected_result.append(selected_instance())
+			return selected_result
+	var empty_result: Array[Dictionary] = []
+	return empty_result
 
 func zone_counts() -> Dictionary:
 	return {

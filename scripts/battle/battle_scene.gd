@@ -22,6 +22,7 @@ const PromptLayerScript := preload("res://scripts/ui/prompt_layer.gd")
 const FeedbackLayerScript := preload("res://scripts/ui/feedback_layer.gd")
 const TableLayerScript := preload("res://scripts/ui/table_layer.gd")
 const HandLayerScript := preload("res://scripts/ui/hand_layer.gd")
+const CombatMarbleStatusOverlayScript := preload("res://scripts/ui/combat_marble_status_overlay.gd")
 const DiceRollLayer2DScript := preload("res://scripts/ui/dice_roll_layer_2d.gd")
 const DiceCupRollLayer3DScript := preload("res://scripts/ui/dice_cup_roll_layer_3d.gd")
 const RunHudScript := preload("res://scripts/ui/run_hud.gd")
@@ -212,6 +213,7 @@ var opponent_layer: Control
 var prompt_layer: Control
 var feedback_layer: Control
 var object_input_layer: Control
+var combat_marble_status_overlay: Control
 var ritual_director: Node
 
 func _ready() -> void:
@@ -473,6 +475,9 @@ func _build_shell() -> void:
 	hud_canvas.add_child(object_input_layer)
 	feedback_layer = FeedbackLayerScript.new()
 	hud_canvas.add_child(feedback_layer)
+	combat_marble_status_overlay = CombatMarbleStatusOverlayScript.new()
+	combat_marble_status_overlay.name = "CombatMarbleStatusOverlay"
+	hud_canvas.add_child(combat_marble_status_overlay)
 	ritual_director = RitualDirectorScript.new()
 	ritual_director.name = "RitualDirector"
 	add_child(ritual_director)
@@ -561,6 +566,7 @@ func _update_visual_layers() -> void:
 	_update_opponent_layer()
 	prompt_layer.set_banner(banner_text, banner_alpha)
 	_update_camera_beat()
+	_sync_combat_marble_status_overlay()
 
 func _update_table_layer() -> void:
 	table_layer.set_state(VisualSnapshots.table_state(_visual_layer_snapshot({
@@ -875,6 +881,59 @@ func _open_potion_menu() -> void:
 	potion_menu_open = true
 	_render()
 
+func _open_combat_marble_status() -> void:
+	if not _can_open_combat_marble_status():
+		return
+	_sync_combat_marble_status_overlay()
+	combat_marble_status_overlay.call("open")
+
+func _can_open_combat_marble_status() -> bool:
+	if combat_marble_status_overlay == null or dice_roll_in_progress:
+		return false
+	if ritual_director != null and ritual_director.has_method("is_ritual_active") and ritual_director.is_ritual_active():
+		return false
+	var counts: Dictionary = marble_deck_state.call("zone_counts")
+	return int(counts.get("all", 0)) > 0
+
+func _sync_combat_marble_status_overlay() -> void:
+	if combat_marble_status_overlay == null:
+		return
+	combat_marble_status_overlay.call("set_state", {
+		"items": _combat_marble_status_items(),
+		"summary": _combat_marble_status_summary()
+	})
+
+func _combat_marble_status_items() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var zone_specs: Array[Dictionary] = [
+		{"zone": "selected", "status": "available"},
+		{"zone": "revealed", "status": "available"},
+		{"zone": "bag", "status": "available"},
+		{"zone": "discard", "status": "discarded"},
+		{"zone": "sealed", "status": "sealed"},
+		{"zone": "removed", "status": "sealed"}
+	]
+	for spec in zone_specs:
+		var zone := str(spec.get("zone", ""))
+		var status := str(spec.get("status", "available"))
+		var marbles_in_zone: Array = marble_deck_state.call("instances_for_zone", zone)
+		for marble_value in marbles_in_zone:
+			if marble_value is Dictionary:
+				result.append({
+					"marble": (marble_value as Dictionary).duplicate(true),
+					"status": status,
+					"zone": zone
+				})
+	return result
+
+func _combat_marble_status_summary() -> Dictionary:
+	var counts: Dictionary = marble_deck_state.call("zone_counts")
+	return {
+		"available": int(counts.get("bag", 0)) + int(counts.get("revealed", 0)) + int(counts.get("selected", 0)),
+		"discarded": int(counts.get("discard", 0)),
+		"sealed": int(counts.get("sealed", 0)) + int(counts.get("removed", 0))
+	}
+
 func _close_potion_menu() -> void:
 	potion_menu_open = false
 	_render()
@@ -977,6 +1036,8 @@ func _clear_object_inputs() -> void:
 func _render_object_inputs() -> void:
 	if object_input_layer == null:
 		return
+	if _can_open_combat_marble_status():
+		_object_button(_marble_pouch_status_rect(), Callable(self, "_open_combat_marble_status"), Callable(self, "_noop"), Callable(self, "_noop"))
 	if phase == "dice" and dice_rolled and _requires_attack_die_choice() and selected_attack_die_index < 0 and dice_role_selecting and not dice_roll_in_progress:
 		for i in range(dice.size()):
 			_object_button(_die_rect(i).grow(12.0), Callable(self, "_select_attack_die").bind(i), Callable(self, "_set_hovered_attack_die").bind(i), Callable(self, "_clear_hovered_attack_die").bind(i))
@@ -2733,6 +2794,9 @@ func _die_rect(index: int) -> Rect2:
 
 func _hand_rect() -> Rect2:
 	return Rect2(Vector2(822, 540), Vector2(230, 86))
+
+func _marble_pouch_status_rect() -> Rect2:
+	return Rect2(Vector2(794, 506), Vector2(92, 64))
 
 func _roulette_spin_rect() -> Rect2:
 	return Rect2(Vector2(440, 160), Vector2(400, 400))
