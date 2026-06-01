@@ -94,6 +94,8 @@ func _reset_run_state() -> void:
 	run_state.map_theme_id = _map_theme_for_floor(run_state.floor_index)
 	run_state.map_step = 0
 	run_state.completed_nodes.clear()
+	if run_state.has_method("reset_starting_marbles"):
+		run_state.reset_starting_marbles()
 	_reset_run_stats()
 
 func _reset_run_stats() -> void:
@@ -148,6 +150,8 @@ func _continue_saved_run() -> void:
 		await _open_title(true)
 		return
 	run_state.apply_payload(run_payload)
+	if (run_state.get("marble_deck") as Array).is_empty() and run_state.has_method("reset_starting_marbles"):
+		run_state.reset_starting_marbles()
 	run_stats = DemoSaveService.load_run_stats()
 	_normalize_run_stats()
 	await _open_map()

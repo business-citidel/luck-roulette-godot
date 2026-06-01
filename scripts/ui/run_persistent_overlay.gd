@@ -4,6 +4,7 @@ extends Control
 signal proceed_requested
 
 const RelicCatalog := preload("res://scripts/systems/relic_catalog.gd")
+const MarbleCatalog := preload("res://scripts/systems/marble_catalog.gd")
 const AssetCatalog := preload("res://scripts/systems/asset_catalog.gd")
 const UiSkin := preload("res://scripts/ui/ui_skin.gd")
 const UiText := preload("res://scripts/ui/ui_text.gd")
@@ -19,17 +20,23 @@ const HP_RECT := Rect2(Vector2(44, 24), Vector2(126, 42))
 const GOLD_RECT := Rect2(Vector2(184, 24), Vector2(122, 42))
 const TICKET_RECT := Rect2(Vector2(320, 24), Vector2(142, 42))
 const POTION_RECT := Rect2(Vector2(476, 24), Vector2(138, 42))
+const MARBLE_DECK_RECT := Rect2(Vector2(628, 24), Vector2(148, 42))
 const FLOOR_RECT := Rect2(Vector2(998, 24), Vector2(108, 42))
 const SETTINGS_RECT := Rect2(Vector2(1120, 24), Vector2(116, 42))
 const RELIC_ROW_RECT := Rect2(Vector2(44, 82), Vector2(760, 46))
 const DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(360, 72))
 const COMBAT_DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(330, 70))
 const PROCEED_RECT := Rect2(Vector2(1104, 636), Vector2(126, 56))
+const MARBLE_GALLERY_RECT := Rect2(Vector2(214, 98), Vector2(852, 520))
+const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(920, 548), Vector2(112, 44))
 
 var run_payload: Dictionary = {}
 var phase := ""
 var selected_relic_id := ""
+var marble_gallery_open := false
 var proceed_button: Button
+var marble_gallery_button: Button
+var marble_gallery_close_button: Button
 var relic_buttons: Array[Button] = []
 var relic_pulse_timers: Dictionary = {}
 
@@ -37,11 +44,16 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_proceed_button()
+	_build_marble_gallery_buttons()
 	_refresh_relic_buttons()
 	queue_redraw()
 
 func _has_point(point: Vector2) -> bool:
+	if marble_gallery_open:
+		return true
 	if proceed_button != null and proceed_button.visible and PROCEED_RECT.has_point(point):
+		return true
+	if marble_gallery_button != null and marble_gallery_button.visible and MARBLE_DECK_RECT.has_point(point):
 		return true
 	if _relic_at_position(point) != "":
 		return true
@@ -52,6 +64,11 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	var mouse_event := event as InputEventMouseButton
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	if marble_gallery_open:
+		if not MARBLE_GALLERY_RECT.has_point(mouse_event.position):
+			_set_marble_gallery_open(false)
+		accept_event()
 		return
 	if proceed_button != null and proceed_button.visible and not proceed_button.disabled and PROCEED_RECT.has_point(mouse_event.position):
 		proceed_requested.emit()
@@ -83,6 +100,10 @@ func configure(payload: Dictionary, phase_name: String, proceed_visible: bool = 
 		proceed_button.visible = proceed_visible
 		proceed_button.disabled = not proceed_enabled
 		proceed_button.text = proceed_label if proceed_label != "" else UiText.t("overlay.exit")
+	if marble_gallery_button != null:
+		marble_gallery_button.visible = not run_payload.is_empty()
+	if marble_gallery_close_button != null:
+		marble_gallery_close_button.visible = marble_gallery_open
 	_refresh_relic_buttons()
 	queue_redraw()
 
@@ -102,6 +123,7 @@ func _draw() -> void:
 	_draw_resource_chips()
 	_draw_relic_row()
 	_draw_selected_relic_detail()
+	_draw_marble_gallery()
 
 func _build_proceed_button() -> void:
 	proceed_button = Button.new()
@@ -114,6 +136,31 @@ func _build_proceed_button() -> void:
 	UiSkin.apply_button(proceed_button, true)
 	proceed_button.pressed.connect(func() -> void: proceed_requested.emit())
 	add_child(proceed_button)
+
+func _build_marble_gallery_buttons() -> void:
+	marble_gallery_button = Button.new()
+	marble_gallery_button.name = "RunOverlayMarbleDeckButton"
+	marble_gallery_button.position = MARBLE_DECK_RECT.position
+	marble_gallery_button.size = MARBLE_DECK_RECT.size
+	marble_gallery_button.text = ""
+	marble_gallery_button.visible = false
+	marble_gallery_button.tooltip_text = UiText.t("overlay.marble_gallery.title")
+	marble_gallery_button.focus_mode = Control.FOCUS_NONE
+	marble_gallery_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_apply_transparent_button(marble_gallery_button)
+	marble_gallery_button.pressed.connect(func() -> void: _set_marble_gallery_open(true))
+	add_child(marble_gallery_button)
+
+	marble_gallery_close_button = Button.new()
+	marble_gallery_close_button.name = "RunOverlayMarbleGalleryClose"
+	marble_gallery_close_button.position = MARBLE_GALLERY_CLOSE_RECT.position
+	marble_gallery_close_button.size = MARBLE_GALLERY_CLOSE_RECT.size
+	marble_gallery_close_button.text = UiText.t("overlay.marble_gallery.close")
+	marble_gallery_close_button.visible = false
+	marble_gallery_close_button.focus_mode = Control.FOCUS_NONE
+	UiSkin.apply_button(marble_gallery_close_button, false)
+	marble_gallery_close_button.pressed.connect(func() -> void: _set_marble_gallery_open(false))
+	add_child(marble_gallery_close_button)
 
 func _refresh_relic_buttons() -> void:
 	for button in relic_buttons:
@@ -143,6 +190,13 @@ func _toggle_relic_detail(relic_id: String) -> void:
 	selected_relic_id = "" if selected_relic_id == relic_id else relic_id
 	queue_redraw()
 
+func _set_marble_gallery_open(open: bool) -> void:
+	marble_gallery_open = open
+	mouse_filter = Control.MOUSE_FILTER_STOP if marble_gallery_open else Control.MOUSE_FILTER_PASS
+	if marble_gallery_close_button != null:
+		marble_gallery_close_button.visible = marble_gallery_open
+	queue_redraw()
+
 func _apply_transparent_button(button: Button) -> void:
 	var empty := StyleBoxEmpty.new()
 	button.add_theme_stylebox_override("normal", empty)
@@ -169,6 +223,7 @@ func _draw_resource_chips() -> void:
 	_draw_chip(GOLD_RECT, UiText.t("overlay.gold"), str(run_payload.get("gold", 0)), Color("#8a5f12"))
 	_draw_chip(TICKET_RECT, UiText.t("overlay.tickets"), str(run_payload.get("contract_tickets", 0)), Color("#7a311f"))
 	_draw_chip(POTION_RECT, UiText.t("overlay.potions"), _potion_slot_text(), Color("#6f1d2b"))
+	_draw_marble_deck_chip()
 	_draw_chip(FLOOR_RECT, UiText.t("overlay.floor"), _floor_text(), Color("#294861"))
 	_draw_chip(SETTINGS_RECT, UiText.t("overlay.settings"), "ESC", Color("#3e4655"))
 
@@ -176,6 +231,17 @@ func _draw_chip(rect: Rect2, label: String, value: String, value_color: Color) -
 	UiSkin.draw_ledger_slip(self, rect, Color(1, 1, 1, 0.84))
 	_draw_text(label, rect.position + Vector2(12, 26), 12, Color(INK, 0.54))
 	_draw_text(value, rect.position + Vector2(max(42.0, min(72.0, label.length() * 8.0 + 18.0)), 29), 18, value_color)
+
+func _draw_marble_deck_chip() -> void:
+	UiSkin.draw_ledger_slip(self, MARBLE_DECK_RECT, Color(1, 1, 1, 0.84))
+	var icon_rect := Rect2(MARBLE_DECK_RECT.position + Vector2(10, 8), Vector2(26, 26))
+	var texture := AssetCatalog.marble_texture("marble_plain_v2")
+	if texture != null:
+		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 0.94))
+	else:
+		draw_circle(icon_rect.get_center(), 12.0, Color("#e8e0cf"))
+	_draw_text(UiText.t("overlay.marbles"), MARBLE_DECK_RECT.position + Vector2(42, 24), 12, Color(INK, 0.54))
+	_draw_text(str(_marble_deck_items().size()), MARBLE_DECK_RECT.position + Vector2(102, 29), 18, Color("#5f4630"))
 
 func _potion_slot_text() -> String:
 	var used := int(run_payload.get("potion_slots_used", (run_payload.get("potion_ids", []) as Array).size()))
@@ -241,6 +307,47 @@ func _detail_rect() -> Rect2:
 		return COMBAT_DETAIL_RECT
 	return DETAIL_RECT
 
+func _draw_marble_gallery() -> void:
+	if not marble_gallery_open:
+		return
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#020306", 0.54), true)
+	var board_texture := AssetCatalog.combat_runtime_texture("marble_bag_overlay_board")
+	if board_texture != null:
+		draw_texture_rect(board_texture, MARBLE_GALLERY_RECT, false, Color(1, 1, 1, 0.96))
+	else:
+		draw_rect(MARBLE_GALLERY_RECT, Color("#090b0f", 0.94), true)
+		draw_rect(MARBLE_GALLERY_RECT, Color("#8a6a3a", 0.72), false, 2.0)
+	var marbles := _marble_deck_items()
+	_draw_text(UiText.t("overlay.marble_gallery.title"), MARBLE_GALLERY_RECT.position + Vector2(182, 72), 24, TEXT)
+	_draw_text(UiText.t("overlay.marble_gallery.count", {"count": marbles.size(), "max": MarbleCatalog.MAX_DECK_SIZE}), MARBLE_GALLERY_RECT.position + Vector2(184, 96), 13, Color(TEXT, 0.68))
+	if marbles.is_empty():
+		_draw_text(UiText.t("overlay.marble_gallery.empty"), MARBLE_GALLERY_RECT.position + Vector2(42, 146), 18, Color(TEXT, 0.62))
+		return
+	var columns := 4
+	var card_size := Vector2(176, 112)
+	var gap := Vector2(18, 18)
+	var start := MARBLE_GALLERY_RECT.position + Vector2(52, 126)
+	for i in range(min(marbles.size(), MarbleCatalog.MAX_DECK_SIZE)):
+		var col := i % columns
+		var row := int(floor(float(i) / float(columns)))
+		var rect := Rect2(start + Vector2(float(col) * (card_size.x + gap.x), float(row) * (card_size.y + gap.y)), card_size)
+		_draw_marble_gallery_card(rect, marbles[i] as Dictionary, i + 1)
+
+func _draw_marble_gallery_card(rect: Rect2, marble: Dictionary, index: int) -> void:
+	draw_rect(rect, Color("#0b0e12", 0.90), true)
+	draw_rect(rect, Color("#d1a36a", 0.42), false, 1.5)
+	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
+	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
+	var icon_rect := Rect2(rect.position + Vector2(12, 16), Vector2(58, 58))
+	if texture != null:
+		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 0.94))
+	else:
+		draw_circle(icon_rect.get_center(), 26.0, Color("#e8e0cf"))
+	_draw_text("#" + str(index), rect.position + Vector2(12, 96), 11, Color(TEXT, 0.46))
+	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(78, 36), 17, TEXT, rect.size.x - 90.0)
+	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(78, 58), 11, Color(TEXT, 0.58), rect.size.x - 90.0)
+	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(78, 82), 10, GOLD, rect.size.x - 90.0)
+
 func _relic_icon_rects() -> Array[Dictionary]:
 	var relic_ids: Array = run_payload.get("relic_ids", [])
 	var result: Array[Dictionary] = []
@@ -276,6 +383,33 @@ func _relic_at_position(pos: Vector2) -> String:
 		if rect.has_point(pos):
 			return str(entry.get("id", ""))
 	return ""
+
+func _marble_deck_items() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var value: Variant = run_payload.get("marble_deck", [])
+	if value is Array:
+		for item in value:
+			if item is Dictionary:
+				result.append((item as Dictionary).duplicate(true))
+	return result
+
+func _fit_text_draw(text: String, pos: Vector2, font_size: int, color: Color, max_width: float) -> void:
+	draw_string(ThemeDB.fallback_font, pos, _fit_text(text, font_size, max_width), HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size, color)
+
+func _fit_text(text: String, font_size: int, max_width: float) -> String:
+	if _text_width(text, font_size) <= max_width:
+		return text
+	var suffix: String = "..."
+	var available: int = max(0, text.length() - suffix.length())
+	while available > 0:
+		var candidate: String = text.substr(0, available).strip_edges() + suffix
+		if _text_width(candidate, font_size) <= max_width:
+			return candidate
+		available -= 1
+	return suffix
+
+func _text_width(text: String, font_size: int) -> float:
+	return ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 
 func _clip(text: String, max_chars: int) -> String:
 	if text.length() <= max_chars:

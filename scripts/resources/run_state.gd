@@ -1,6 +1,8 @@
 class_name RunState
 extends Resource
 
+const MarbleCatalog := preload("res://scripts/systems/marble_catalog.gd")
+
 @export var seed_text: String = ""
 @export var gold: int = 0
 @export var contract_tickets: int = 0
@@ -19,6 +21,8 @@ extends Resource
 @export var map_theme_id: String = "01_base"
 @export var map_step: int = 0
 @export var completed_nodes: Array[String] = []
+@export var marble_deck: Array[Dictionary] = []
+@export var next_marble_instance_number: int = 1
 
 func to_payload() -> Dictionary:
 	return {
@@ -40,7 +44,9 @@ func to_payload() -> Dictionary:
 		"map_variant": map_variant,
 		"map_theme_id": map_theme_id,
 		"map_step": map_step,
-		"completed_nodes": completed_nodes.duplicate()
+		"completed_nodes": completed_nodes.duplicate(),
+		"marble_deck": marble_deck.duplicate(true),
+		"next_marble_instance_number": next_marble_instance_number
 	}
 
 func apply_payload(payload: Dictionary) -> void:
@@ -62,6 +68,9 @@ func apply_payload(payload: Dictionary) -> void:
 	map_theme_id = str(payload.get("map_theme_id", map_theme_id))
 	map_step = int(payload.get("map_step", map_step))
 	completed_nodes = _string_array(payload.get("completed_nodes", completed_nodes))
+	if payload.has("marble_deck"):
+		marble_deck = _dictionary_array(payload.get("marble_deck", []))
+	next_marble_instance_number = max(1, int(payload.get("next_marble_instance_number", next_marble_instance_number)))
 
 func apply_reward(result: Dictionary) -> void:
 	if result.has("player_max_hp"):
@@ -87,6 +96,13 @@ func apply_reward(result: Dictionary) -> void:
 		var id: String = str(potion_id)
 		if id != "":
 			potion_ids.erase(id)
+	for marble_id in result.get("add_marble_ids", result.get("marble_ids", [])):
+		add_marble(str(marble_id), str(result.get("source", "reward")), false)
+	for marble in result.get("add_marbles", result.get("marble_instances", [])):
+		if marble is Dictionary:
+			add_marble_instance(marble as Dictionary)
+	for instance_id in result.get("remove_marble_instance_ids", []):
+		remove_marble_instance(str(instance_id))
 	for mod in result.get("next_combat_mods", []):
 		if mod is Dictionary:
 			next_combat_mods.append(mod.duplicate(true))
@@ -98,6 +114,35 @@ func consume_next_combat_mods() -> Array[Dictionary]:
 	var result: Array[Dictionary] = next_combat_mods.duplicate(true)
 	next_combat_mods.clear()
 	return result
+
+func reset_starting_marbles() -> void:
+	marble_deck.clear()
+	next_marble_instance_number = 1
+	for marble_id in MarbleCatalog.starting_deck_ids():
+		add_marble(str(marble_id), "starting_deck", false)
+
+func add_marble(marble_id: String, source: String = "reward", is_temporary: bool = false) -> Dictionary:
+	var instance_id := "run_marble_%03d" % next_marble_instance_number
+	next_marble_instance_number += 1
+	var instance := MarbleCatalog.instance_from_id(instance_id, marble_id, source, is_temporary)
+	marble_deck.append(instance)
+	return instance.duplicate(true)
+
+func add_marble_instance(marble: Dictionary) -> Dictionary:
+	var marble_id := MarbleCatalog.normalize_id(str(marble.get("marble_id", MarbleCatalog.PLAIN)))
+	var instance_id := str(marble.get("instance_id", ""))
+	if instance_id == "":
+		return add_marble(marble_id, str(marble.get("source", "external")), bool(marble.get("is_temporary", false)))
+	var instance := MarbleCatalog.instance_from_id(instance_id, marble_id, str(marble.get("source", "external")), bool(marble.get("is_temporary", false)))
+	marble_deck.append(instance)
+	return instance.duplicate(true)
+
+func remove_marble_instance(instance_id: String) -> bool:
+	for i in range(marble_deck.size()):
+		if str(marble_deck[i].get("instance_id", "")) == instance_id:
+			marble_deck.remove_at(i)
+			return true
+	return false
 
 func _string_array(value: Variant) -> Array[String]:
 	var result: Array[String] = []
