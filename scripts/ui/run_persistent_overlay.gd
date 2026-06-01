@@ -357,10 +357,6 @@ func _draw_marble_gallery_card(rect: Rect2, marble: Dictionary, hovered: bool) -
 
 func _draw_empty_marble_gallery_card(rect: Rect2) -> void:
 	_draw_marble_gallery_card_frame(rect, true, false)
-	var center := rect.position + Vector2(rect.size.x * 0.5, 46.0)
-	draw_circle(center, 30.0, Color("#090704", 0.28))
-	draw_circle(center, 31.0, Color(TEXT, 0.12), false, 1.0)
-	ShellText.draw_center_fit(self, "-", Rect2(rect.position + Vector2(0, 76), Vector2(rect.size.x, 24)), 22, Color(INK, 0.28), 14, "bold")
 
 func _draw_marble_gallery_card_frame(rect: Rect2, empty: bool, hovered: bool) -> void:
 	var texture_id := "item_locked_card" if empty else "item_card"
