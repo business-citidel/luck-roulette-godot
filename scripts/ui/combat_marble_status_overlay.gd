@@ -102,10 +102,6 @@ func _draw_status_card(rect: Rect2, item: Dictionary) -> void:
 
 func _draw_empty_card(rect: Rect2) -> void:
 	_draw_card_frame(rect, true)
-	var center := rect.position + Vector2(rect.size.x * 0.5, 46.0)
-	draw_circle(center, 30.0, Color("#090704", 0.28))
-	draw_circle(center, 31.0, Color(TEXT, 0.12), false, 1.0)
-	ShellText.draw_center_fit(self, "-", Rect2(rect.position + Vector2(0, 76), Vector2(rect.size.x, 24)), 22, Color(INK, 0.28), 14, "bold")
 
 func _draw_card_frame(rect: Rect2, empty: bool) -> void:
 	var texture_id := "item_locked_card" if empty else "item_card"
