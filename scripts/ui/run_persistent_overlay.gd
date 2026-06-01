@@ -29,9 +29,7 @@ const COMBAT_DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(330, 70))
 const PROCEED_RECT := Rect2(Vector2(1104, 636), Vector2(126, 56))
 const MARBLE_GALLERY_RECT := Rect2(Vector2(134, 86), Vector2(1012, 570))
 const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(994, 590), Vector2(112, 44))
-const MARBLE_GALLERY_COLUMNS := 4
-const MARBLE_GALLERY_SLOT_SIZE := Vector2(88, 88)
-const MARBLE_GALLERY_GAP := Vector2(30, 28)
+const MARBLE_GALLERY_SLOT_SIZE := Vector2(94, 94)
 
 var run_payload: Dictionary = {}
 var phase := ""
@@ -430,17 +428,33 @@ func _hovered_marble(marbles: Array[Dictionary]) -> Dictionary:
 	return marbles[hovered_marble_gallery_index].duplicate(true)
 
 func _marble_gallery_grid_rect() -> Rect2:
-	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(104, 154), Vector2(442, 324))
+	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(96, 148), Vector2(486, 350))
 
 func _marble_gallery_detail_rect() -> Rect2:
 	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(626, 156), Vector2(286, 286))
 
 func _marble_gallery_slot_rect(index: int) -> Rect2:
-	var grid_rect := _marble_gallery_grid_rect()
-	var col := index % MARBLE_GALLERY_COLUMNS
-	var row := int(floor(float(index) / float(MARBLE_GALLERY_COLUMNS)))
-	var offset := Vector2(float(col) * (MARBLE_GALLERY_SLOT_SIZE.x + MARBLE_GALLERY_GAP.x), float(row) * (MARBLE_GALLERY_SLOT_SIZE.y + MARBLE_GALLERY_GAP.y))
-	return Rect2(grid_rect.position + offset, MARBLE_GALLERY_SLOT_SIZE)
+	var centers := _marble_gallery_slot_centers()
+	if index < 0 or index >= centers.size():
+		return Rect2()
+	var center: Vector2 = MARBLE_GALLERY_RECT.position + centers[index]
+	return Rect2(center - MARBLE_GALLERY_SLOT_SIZE * 0.5, MARBLE_GALLERY_SLOT_SIZE)
+
+func _marble_gallery_slot_centers() -> Array[Vector2]:
+	return [
+		Vector2(154, 203),
+		Vector2(276, 203),
+		Vector2(398, 203),
+		Vector2(520, 203),
+		Vector2(154, 324),
+		Vector2(276, 324),
+		Vector2(398, 324),
+		Vector2(520, 324),
+		Vector2(154, 445),
+		Vector2(276, 445),
+		Vector2(398, 445),
+		Vector2(520, 445)
+	]
 
 func _marble_gallery_index_at(pos: Vector2) -> int:
 	var marbles := _marble_deck_items()
