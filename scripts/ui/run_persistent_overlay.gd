@@ -442,18 +442,18 @@ func _marble_gallery_slot_rect(index: int) -> Rect2:
 
 func _marble_gallery_slot_centers() -> Array[Vector2]:
 	return [
-		Vector2(154, 203),
-		Vector2(276, 203),
-		Vector2(398, 203),
-		Vector2(520, 203),
-		Vector2(154, 324),
-		Vector2(276, 324),
-		Vector2(398, 324),
-		Vector2(520, 324),
-		Vector2(154, 445),
-		Vector2(276, 445),
-		Vector2(398, 445),
-		Vector2(520, 445)
+		Vector2(162, 203),
+		Vector2(284, 203),
+		Vector2(406, 203),
+		Vector2(528, 203),
+		Vector2(162, 324),
+		Vector2(284, 324),
+		Vector2(406, 324),
+		Vector2(528, 324),
+		Vector2(162, 445),
+		Vector2(284, 445),
+		Vector2(406, 445),
+		Vector2(528, 445)
 	]
 
 func _marble_gallery_index_at(pos: Vector2) -> int:
