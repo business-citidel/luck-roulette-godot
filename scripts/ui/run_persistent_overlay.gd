@@ -47,6 +47,7 @@ var marble_gallery_button: Button
 var marble_gallery_close_button: Button
 var relic_buttons: Array[Button] = []
 var relic_pulse_timers: Dictionary = {}
+var marble_texture_source_rects: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
@@ -378,7 +379,7 @@ func _draw_marble_on_gallery_card(rect: Rect2, marble: Dictionary) -> void:
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
 	var icon_rect := Rect2(rect.position + Vector2((rect.size.x - 78.0) * 0.5, 15.0), Vector2(78, 78))
 	if texture != null:
-		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
+		_draw_normalized_marble_texture(texture, icon_rect)
 	else:
 		draw_circle(icon_rect.get_center(), 32.0, Color("#e8e0cf"))
 	var label_rect := Rect2(rect.position + Vector2(11, 96), Vector2(rect.size.x - 22, 20))
@@ -399,7 +400,7 @@ func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
 	var icon_rect := Rect2(rect.position + Vector2(114, 60), Vector2(92, 92))
 	if texture != null:
-		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
+		_draw_normalized_marble_texture(texture, icon_rect)
 	else:
 		draw_circle(icon_rect.get_center(), 40.0, Color("#e8e0cf"))
 	ShellText.draw_fit(self, str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), Rect2(rect.position + Vector2(34, 176), Vector2(rect.size.x - 68, 34)), 24, Color("#120b05"), 15, HORIZONTAL_ALIGNMENT_LEFT, "heading")
@@ -408,6 +409,53 @@ func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	draw_rect(effect_rect, Color("#1d1208", 0.14), true)
 	draw_rect(effect_rect, Color("#7c5819", 0.22), false, 1.0)
 	ShellText.draw_fit(self, str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), Rect2(effect_rect.position + Vector2(12, 13), Vector2(effect_rect.size.x - 24, 24)), 16, Color("#2b1806"), 10, HORIZONTAL_ALIGNMENT_LEFT, "bold")
+
+func _draw_normalized_marble_texture(texture: Texture2D, rect: Rect2) -> void:
+	draw_texture_rect_region(texture, rect, _marble_texture_source_rect(texture), Color.WHITE)
+
+func _marble_texture_source_rect(texture: Texture2D) -> Rect2:
+	var cache_key := texture.resource_path
+	if cache_key == "":
+		cache_key = str(texture.get_instance_id())
+	if marble_texture_source_rects.has(cache_key):
+		return marble_texture_source_rects.get(cache_key, Rect2())
+	var image := texture.get_image()
+	if image == null or image.is_empty():
+		var fallback := Rect2(Vector2.ZERO, texture.get_size())
+		marble_texture_source_rects[cache_key] = fallback
+		return fallback
+	var bbox := _alpha_bbox(image, 0.04)
+	if bbox.size.x <= 0 or bbox.size.y <= 0:
+		var empty_fallback := Rect2(Vector2.ZERO, texture.get_size())
+		marble_texture_source_rects[cache_key] = empty_fallback
+		return empty_fallback
+	var square_size: int = maxi(bbox.size.x, bbox.size.y)
+	var center: Vector2 = Vector2(bbox.position) + Vector2(bbox.size) * 0.5
+	var source_pos := Vector2i(
+		int(round(center.x - float(square_size) * 0.5)),
+		int(round(center.y - float(square_size) * 0.5))
+	)
+	source_pos.x = clampi(source_pos.x, 0, max(0, image.get_width() - square_size))
+	source_pos.y = clampi(source_pos.y, 0, max(0, image.get_height() - square_size))
+	var source_rect := Rect2(Vector2(source_pos), Vector2(square_size, square_size))
+	marble_texture_source_rects[cache_key] = source_rect
+	return source_rect
+
+func _alpha_bbox(image: Image, threshold: float) -> Rect2i:
+	var min_x := image.get_width()
+	var min_y := image.get_height()
+	var max_x := -1
+	var max_y := -1
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			if image.get_pixel(x, y).a > threshold:
+				min_x = min(min_x, x)
+				min_y = min(min_y, y)
+				max_x = max(max_x, x)
+				max_y = max(max_y, y)
+	if max_x < min_x or max_y < min_y:
+		return Rect2i()
+	return Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
 func _relic_icon_rects() -> Array[Dictionary]:
 	var relic_ids: Array = run_payload.get("relic_ids", [])
