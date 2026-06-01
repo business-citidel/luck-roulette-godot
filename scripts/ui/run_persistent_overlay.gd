@@ -6,6 +6,7 @@ signal proceed_requested
 const RelicCatalog := preload("res://scripts/systems/relic_catalog.gd")
 const MarbleCatalog := preload("res://scripts/systems/marble_catalog.gd")
 const AssetCatalog := preload("res://scripts/systems/asset_catalog.gd")
+const ShellText := preload("res://scripts/ui/shell_text.gd")
 const UiSkin := preload("res://scripts/ui/ui_skin.gd")
 const UiText := preload("res://scripts/ui/ui_text.gd")
 
@@ -27,14 +28,14 @@ const RELIC_ROW_RECT := Rect2(Vector2(44, 82), Vector2(760, 46))
 const DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(360, 72))
 const COMBAT_DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(330, 70))
 const PROCEED_RECT := Rect2(Vector2(1104, 636), Vector2(126, 56))
-const MARBLE_GALLERY_RECT := Rect2(Vector2(84, 74), Vector2(1112, 592))
-const MARBLE_GALLERY_INNER_RECT := Rect2(Vector2(116, 112), Vector2(1048, 512))
+const MARBLE_GALLERY_RECT := Rect2(Vector2(72, 52), Vector2(1136, 616))
+const MARBLE_GALLERY_INNER_RECT := Rect2(Vector2(104, 84), Vector2(1072, 552))
 const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(996, 598), Vector2(132, 44))
-const MARBLE_GALLERY_CARD_ORIGIN := Vector2(134, 176)
-const MARBLE_GALLERY_CARD_SIZE := Vector2(146, 126)
-const MARBLE_GALLERY_CARD_GAP := Vector2(20, 22)
+const MARBLE_GALLERY_CARD_ORIGIN := Vector2(128, 176)
+const MARBLE_GALLERY_CARD_SIZE := Vector2(142, 126)
+const MARBLE_GALLERY_CARD_GAP := Vector2(22, 22)
 const MARBLE_GALLERY_COLUMNS := 4
-const MARBLE_GALLERY_DETAIL_RECT := Rect2(Vector2(834, 154), Vector2(318, 402))
+const MARBLE_GALLERY_DETAIL_RECT := Rect2(Vector2(836, 128), Vector2(320, 456))
 
 var run_payload: Dictionary = {}
 var phase := ""
@@ -336,11 +337,11 @@ func _draw_marble_gallery() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color("#020306", 0.54), true)
 	UiSkin.draw_table_stage(self, MARBLE_GALLERY_RECT, MARBLE_GALLERY_INNER_RECT, Color(1, 1, 1, 0.96))
 	var marbles := _marble_deck_items()
-	_draw_text(UiText.t("overlay.marble_gallery.title"), MARBLE_GALLERY_RECT.position + Vector2(54, 70), 30, TEXT)
-	_draw_text(UiText.t("overlay.marble_gallery.count", {"count": marbles.size(), "max": MarbleCatalog.MAX_DECK_SIZE}), MARBLE_GALLERY_RECT.position + Vector2(56, 100), 14, Color(TEXT, 0.68))
+	ShellText.draw_shadow(self, UiText.t("overlay.marble_gallery.title"), Vector2(130, 160), 30, TEXT, Color("#090704", 0.62), Vector2(1, 2), -1.0, HORIZONTAL_ALIGNMENT_LEFT, "heading")
+	ShellText.draw_fit_shadow(self, UiText.t("overlay.marble_gallery.count", {"count": marbles.size(), "max": MarbleCatalog.MAX_DECK_SIZE}), Rect2(Vector2(504, 138), Vector2(248, 22)), 14, Color(TEXT, 0.72), 10, HORIZONTAL_ALIGNMENT_RIGHT, "bold")
 	_draw_marble_gallery_detail(_hovered_marble(marbles))
 	if marbles.is_empty():
-		_draw_text(UiText.t("overlay.marble_gallery.empty"), MARBLE_GALLERY_RECT.position + Vector2(68, 162), 18, Color(TEXT, 0.62))
+		ShellText.draw_fit_shadow(self, UiText.t("overlay.marble_gallery.empty"), Rect2(MARBLE_GALLERY_CARD_ORIGIN, Vector2(4.0 * MARBLE_GALLERY_CARD_SIZE.x + 3.0 * MARBLE_GALLERY_CARD_GAP.x, 28.0)), 18, Color(TEXT, 0.62), 12, HORIZONTAL_ALIGNMENT_LEFT, "bold")
 		return
 	for i in range(MarbleCatalog.MAX_DECK_SIZE):
 		var rect := _marble_gallery_slot_rect(i)
@@ -350,27 +351,42 @@ func _draw_marble_gallery() -> void:
 			_draw_marble_gallery_card(rect, marbles[i] as Dictionary, i == hovered_marble_gallery_index)
 
 func _draw_marble_gallery_card(rect: Rect2, marble: Dictionary, hovered: bool) -> void:
-	draw_rect(rect, Color("#0a0d12", 0.84), true)
-	draw_rect(rect, Color(GOLD, 0.64 if hovered else 0.24), false, 2.5 if hovered else 1.2)
+	_draw_marble_gallery_card_frame(rect, false, hovered)
+	_draw_marble_on_gallery_card(rect, marble)
+
+func _draw_empty_marble_gallery_card(rect: Rect2) -> void:
+	_draw_marble_gallery_card_frame(rect, true, false)
+	var center := rect.position + Vector2(rect.size.x * 0.5, 46.0)
+	draw_circle(center, 30.0, Color("#090704", 0.28))
+	draw_circle(center, 31.0, Color(TEXT, 0.12), false, 1.0)
+	ShellText.draw_center_fit(self, "-", Rect2(rect.position + Vector2(0, 76), Vector2(rect.size.x, 24)), 22, Color(INK, 0.28), 14, "bold")
+
+func _draw_marble_gallery_card_frame(rect: Rect2, empty: bool, hovered: bool) -> void:
+	var texture_id := "item_locked_card" if empty else "item_card"
+	var texture := AssetCatalog.shell_gallery_texture(texture_id)
+	var alpha := 0.56 if empty else 0.94
+	if texture != null:
+		draw_texture_rect(texture, rect, false, Color(1, 1, 1, alpha))
+	else:
+		UiSkin.draw_ledger_slip(self, rect, Color(1, 1, 1, alpha))
 	if hovered:
-		draw_rect(rect.grow(-7.0), Color("#fff0b8", 0.16), false, 2.0)
-	var center := rect.position + Vector2(rect.size.x * 0.5, 44.0)
-	draw_circle(center + Vector2(0, 3), 36.0, Color("#020304", 0.36))
+		draw_rect(rect.grow(-4.0), Color(GOLD, 0.30), false, 4.0)
+		draw_rect(rect.grow(-10.0), Color("#fff0b8", 0.18), false, 1.0)
+
+func _draw_marble_on_gallery_card(rect: Rect2, marble: Dictionary) -> void:
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
-	var icon_rect := Rect2(center - Vector2(35, 35), Vector2(70, 70))
+	var icon_rect := Rect2(rect.position + Vector2((rect.size.x - 78.0) * 0.5, 15.0), Vector2(78, 78))
+	draw_circle(icon_rect.get_center() + Vector2(0, 5), 34.0, Color("#020304", 0.34))
+	draw_circle(icon_rect.get_center(), 34.0, Color("#3b2a1a", 0.16))
 	if texture != null:
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
 		draw_circle(icon_rect.get_center(), 32.0, Color("#e8e0cf"))
-	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), Rect2(rect.position + Vector2(12, 86), Vector2(rect.size.x - 24, 24)).position, 15, TEXT, rect.size.x - 24.0)
-	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), Rect2(rect.position + Vector2(12, 108), Vector2(rect.size.x - 24, 16)).position, 10, Color(TEXT, 0.58), rect.size.x - 24.0)
-
-func _draw_empty_marble_gallery_card(rect: Rect2) -> void:
-	draw_rect(rect, Color("#090704", 0.34), true)
-	draw_rect(rect, Color(GOLD, 0.12), false, 1.0)
-	draw_circle(rect.position + Vector2(rect.size.x * 0.5, 44.0), 30.0, Color("#080b0d", 0.28))
-	draw_circle(rect.position + Vector2(rect.size.x * 0.5, 44.0), 32.0, Color(TEXT, 0.12), false, 1.0)
+	var label_rect := Rect2(rect.position + Vector2(11, 96), Vector2(rect.size.x - 22, 20))
+	draw_rect(label_rect, Color("#090704", 0.48), true)
+	draw_rect(label_rect, Color(GOLD, 0.22), false, 1.0)
+	ShellText.draw_center_fit_shadow(self, str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), label_rect, 12, TEXT, 8, "bold", Color("#090704", 0.70), Vector2(1, 1))
 
 func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 	var rect := _marble_gallery_detail_rect()
@@ -383,17 +399,18 @@ func _draw_marble_gallery_detail(marble: Dictionary) -> void:
 		return
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
-	var icon_rect := Rect2(rect.position + Vector2(116, 52), Vector2(86, 86))
+	var icon_rect := Rect2(rect.position + Vector2(114, 60), Vector2(92, 92))
+	draw_circle(icon_rect.get_center() + Vector2(0, 7), 38.0, Color("#2a1709", 0.18))
 	if texture != null:
 		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
 		draw_circle(icon_rect.get_center(), 40.0, Color("#e8e0cf"))
-	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(34, 176), 25, Color("#120b05"), rect.size.x - 68.0)
-	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(34, 212), 14, Color("#3f2b17"), rect.size.x - 68.0)
-	var effect_rect := Rect2(rect.position + Vector2(30, 252), Vector2(rect.size.x - 60, 42))
+	ShellText.draw_fit(self, str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), Rect2(rect.position + Vector2(34, 176), Vector2(rect.size.x - 68, 34)), 24, Color("#120b05"), 15, HORIZONTAL_ALIGNMENT_LEFT, "heading")
+	ShellText.draw_fit(self, str(marble.get("role", MarbleCatalog.role_text(marble_id))), Rect2(rect.position + Vector2(34, 214), Vector2(rect.size.x - 68, 24)), 14, Color("#3f2b17"), 10, HORIZONTAL_ALIGNMENT_LEFT, "bold")
+	var effect_rect := Rect2(rect.position + Vector2(30, 258), Vector2(rect.size.x - 60, 74))
 	draw_rect(effect_rect, Color("#1d1208", 0.14), true)
 	draw_rect(effect_rect, Color("#7c5819", 0.22), false, 1.0)
-	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), effect_rect.position + Vector2(12, 27), 16, Color("#2b1806"), effect_rect.size.x - 24.0)
+	ShellText.draw_fit(self, str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), Rect2(effect_rect.position + Vector2(12, 13), Vector2(effect_rect.size.x - 24, 24)), 16, Color("#2b1806"), 10, HORIZONTAL_ALIGNMENT_LEFT, "bold")
 
 func _relic_icon_rects() -> Array[Dictionary]:
 	var relic_ids: Array = run_payload.get("relic_ids", [])
