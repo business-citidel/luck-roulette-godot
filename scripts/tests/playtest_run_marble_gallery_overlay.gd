@@ -36,6 +36,13 @@ func _initialize() -> void:
 		button.pressed.emit()
 	await _settle(3)
 	_capture("02_marble_deck_gallery_open")
+	var slot_rect: Rect2 = overlay.call("_marble_gallery_slot_rect", 0)
+	overlay.call("_update_hovered_marble", slot_rect.get_center())
+	overlay.queue_redraw()
+	RenderingServer.force_draw(false)
+	await _move_mouse(slot_rect.get_center())
+	await _settle(3)
+	_capture("03_marble_deck_gallery_hover_detail")
 
 	overlay.queue_free()
 	backdrop.queue_free()
@@ -52,6 +59,13 @@ func _initialize() -> void:
 func _settle(frames: int) -> void:
 	for _i in range(frames):
 		await process_frame
+
+func _move_mouse(pos: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = pos
+	motion.global_position = pos
+	root.push_input(motion, true)
+	await process_frame
 
 func _shot_dir_from_args() -> String:
 	for arg in OS.get_cmdline_args():

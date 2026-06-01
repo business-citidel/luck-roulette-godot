@@ -27,13 +27,17 @@ const RELIC_ROW_RECT := Rect2(Vector2(44, 82), Vector2(760, 46))
 const DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(360, 72))
 const COMBAT_DETAIL_RECT := Rect2(Vector2(44, 132), Vector2(330, 70))
 const PROCEED_RECT := Rect2(Vector2(1104, 636), Vector2(126, 56))
-const MARBLE_GALLERY_RECT := Rect2(Vector2(214, 98), Vector2(852, 520))
-const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(920, 548), Vector2(112, 44))
+const MARBLE_GALLERY_RECT := Rect2(Vector2(134, 86), Vector2(1012, 570))
+const MARBLE_GALLERY_CLOSE_RECT := Rect2(Vector2(994, 590), Vector2(112, 44))
+const MARBLE_GALLERY_COLUMNS := 4
+const MARBLE_GALLERY_SLOT_SIZE := Vector2(88, 88)
+const MARBLE_GALLERY_GAP := Vector2(30, 28)
 
 var run_payload: Dictionary = {}
 var phase := ""
 var selected_relic_id := ""
 var marble_gallery_open := false
+var hovered_marble_gallery_index := -1
 var proceed_button: Button
 var marble_gallery_button: Button
 var marble_gallery_close_button: Button
@@ -60,12 +64,20 @@ func _has_point(point: Vector2) -> bool:
 	return selected_relic_id != "" and _detail_rect().has_point(point)
 
 func _gui_input(event: InputEvent) -> void:
+	if marble_gallery_open and event is InputEventMouseMotion:
+		_update_hovered_marble((event as InputEventMouseMotion).position)
+		accept_event()
+		return
 	if not (event is InputEventMouseButton):
 		return
 	var mouse_event := event as InputEventMouseButton
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
 	if marble_gallery_open:
+		if MARBLE_GALLERY_CLOSE_RECT.has_point(mouse_event.position):
+			_set_marble_gallery_open(false)
+			accept_event()
+			return
 		if not MARBLE_GALLERY_RECT.has_point(mouse_event.position):
 			_set_marble_gallery_open(false)
 		accept_event()
@@ -192,9 +204,17 @@ func _toggle_relic_detail(relic_id: String) -> void:
 
 func _set_marble_gallery_open(open: bool) -> void:
 	marble_gallery_open = open
+	hovered_marble_gallery_index = -1
 	mouse_filter = Control.MOUSE_FILTER_STOP if marble_gallery_open else Control.MOUSE_FILTER_PASS
 	if marble_gallery_close_button != null:
 		marble_gallery_close_button.visible = marble_gallery_open
+	queue_redraw()
+
+func _update_hovered_marble(pos: Vector2) -> void:
+	var next_index := _marble_gallery_index_at(pos)
+	if next_index == hovered_marble_gallery_index:
+		return
+	hovered_marble_gallery_index = next_index
 	queue_redraw()
 
 func _apply_transparent_button(button: Button) -> void:
@@ -323,30 +343,41 @@ func _draw_marble_gallery() -> void:
 	if marbles.is_empty():
 		_draw_text(UiText.t("overlay.marble_gallery.empty"), MARBLE_GALLERY_RECT.position + Vector2(42, 146), 18, Color(TEXT, 0.62))
 		return
-	var columns := 4
-	var card_size := Vector2(176, 112)
-	var gap := Vector2(18, 18)
-	var start := MARBLE_GALLERY_RECT.position + Vector2(52, 126)
 	for i in range(min(marbles.size(), MarbleCatalog.MAX_DECK_SIZE)):
-		var col := i % columns
-		var row := int(floor(float(i) / float(columns)))
-		var rect := Rect2(start + Vector2(float(col) * (card_size.x + gap.x), float(row) * (card_size.y + gap.y)), card_size)
-		_draw_marble_gallery_card(rect, marbles[i] as Dictionary, i + 1)
+		_draw_marble_gallery_slot(_marble_gallery_slot_rect(i), marbles[i] as Dictionary, i == hovered_marble_gallery_index)
+	_draw_marble_gallery_detail(_hovered_marble(marbles))
 
-func _draw_marble_gallery_card(rect: Rect2, marble: Dictionary, index: int) -> void:
-	draw_rect(rect, Color("#0b0e12", 0.90), true)
-	draw_rect(rect, Color("#d1a36a", 0.42), false, 1.5)
+func _draw_marble_gallery_slot(rect: Rect2, marble: Dictionary, hovered: bool) -> void:
+	var center := rect.get_center()
+	draw_circle(center + Vector2(0, 3), 38.0, Color("#020304", 0.42))
+	draw_circle(center, 37.0, Color("#140f0a", 0.46))
+	draw_circle(center, 39.0, Color(GOLD, 0.55 if hovered else 0.20), false, 2.5 if hovered else 1.4)
+	if hovered:
+		draw_circle(center, 48.0, Color(GOLD, 0.15), false, 4.0)
 	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
 	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
-	var icon_rect := Rect2(rect.position + Vector2(12, 16), Vector2(58, 58))
+	var icon_rect := Rect2(center - Vector2(35, 35), Vector2(70, 70))
 	if texture != null:
-		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 0.94))
+		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
 	else:
-		draw_circle(icon_rect.get_center(), 26.0, Color("#e8e0cf"))
-	_draw_text("#" + str(index), rect.position + Vector2(12, 96), 11, Color(TEXT, 0.46))
-	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(78, 36), 17, TEXT, rect.size.x - 90.0)
-	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(78, 58), 11, Color(TEXT, 0.58), rect.size.x - 90.0)
-	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(78, 82), 10, GOLD, rect.size.x - 90.0)
+		draw_circle(icon_rect.get_center(), 32.0, Color("#e8e0cf"))
+
+func _draw_marble_gallery_detail(marble: Dictionary) -> void:
+	var rect := _marble_gallery_detail_rect()
+	draw_rect(rect, Color("#090b0f", 0.30), true)
+	draw_rect(rect, Color(GOLD, 0.20), false, 1.3)
+	if marble.is_empty():
+		return
+	var marble_id := str(marble.get("marble_id", MarbleCatalog.PLAIN))
+	var texture := AssetCatalog.marble_texture(str(marble.get("asset_key", MarbleCatalog.asset_key(marble_id))))
+	var icon_rect := Rect2(rect.position + Vector2(20, 24), Vector2(86, 86))
+	if texture != null:
+		draw_texture_rect(texture, icon_rect, false, Color(1, 1, 1, 1.0))
+	else:
+		draw_circle(icon_rect.get_center(), 40.0, Color("#e8e0cf"))
+	_fit_text_draw(str(marble.get("short_name", MarbleCatalog.short_name(marble_id))), rect.position + Vector2(126, 52), 24, TEXT, rect.size.x - 150.0)
+	_fit_text_draw(str(marble.get("role", MarbleCatalog.role_text(marble_id))), rect.position + Vector2(126, 82), 13, Color(TEXT, 0.62), rect.size.x - 150.0)
+	_fit_text_draw(str(marble.get("effect", MarbleCatalog.effect_text(marble_id))), rect.position + Vector2(22, 152), 17, GOLD, rect.size.x - 44.0)
 
 func _relic_icon_rects() -> Array[Dictionary]:
 	var relic_ids: Array = run_payload.get("relic_ids", [])
@@ -392,6 +423,31 @@ func _marble_deck_items() -> Array[Dictionary]:
 			if item is Dictionary:
 				result.append((item as Dictionary).duplicate(true))
 	return result
+
+func _hovered_marble(marbles: Array[Dictionary]) -> Dictionary:
+	if hovered_marble_gallery_index < 0 or hovered_marble_gallery_index >= marbles.size():
+		return {}
+	return marbles[hovered_marble_gallery_index].duplicate(true)
+
+func _marble_gallery_grid_rect() -> Rect2:
+	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(104, 154), Vector2(442, 324))
+
+func _marble_gallery_detail_rect() -> Rect2:
+	return Rect2(MARBLE_GALLERY_RECT.position + Vector2(626, 156), Vector2(286, 286))
+
+func _marble_gallery_slot_rect(index: int) -> Rect2:
+	var grid_rect := _marble_gallery_grid_rect()
+	var col := index % MARBLE_GALLERY_COLUMNS
+	var row := int(floor(float(index) / float(MARBLE_GALLERY_COLUMNS)))
+	var offset := Vector2(float(col) * (MARBLE_GALLERY_SLOT_SIZE.x + MARBLE_GALLERY_GAP.x), float(row) * (MARBLE_GALLERY_SLOT_SIZE.y + MARBLE_GALLERY_GAP.y))
+	return Rect2(grid_rect.position + offset, MARBLE_GALLERY_SLOT_SIZE)
+
+func _marble_gallery_index_at(pos: Vector2) -> int:
+	var marbles := _marble_deck_items()
+	for i in range(min(marbles.size(), MarbleCatalog.MAX_DECK_SIZE)):
+		if _marble_gallery_slot_rect(i).has_point(pos):
+			return i
+	return -1
 
 func _fit_text_draw(text: String, pos: Vector2, font_size: int, color: Color, max_width: float) -> void:
 	draw_string(ThemeDB.fallback_font, pos, _fit_text(text, font_size, max_width), HORIZONTAL_ALIGNMENT_LEFT, max_width, font_size, color)

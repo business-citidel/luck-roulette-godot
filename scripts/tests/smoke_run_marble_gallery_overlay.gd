@@ -35,6 +35,14 @@ func _initialize() -> void:
 		await process_frame
 		if not bool(overlay.get("marble_gallery_open")):
 			failures.append("marble gallery should open from top bar button")
+		var slot_rect: Rect2 = overlay.call("_marble_gallery_slot_rect", 0)
+		overlay.call("_update_hovered_marble", slot_rect.get_center())
+		await process_frame
+		if int(overlay.get("hovered_marble_gallery_index")) != 0:
+			failures.append("marble gallery hover should track hovered marble")
+		var hovered: Dictionary = overlay.call("_hovered_marble", overlay.call("_marble_deck_items"))
+		if hovered.is_empty() or str(hovered.get("marble_id", "")) == "":
+			failures.append("marble gallery hover should resolve hovered marble payload")
 
 	var close_button := overlay.get_node_or_null("RunOverlayMarbleGalleryClose") as Button
 	if close_button == null or not close_button.visible:
@@ -44,6 +52,16 @@ func _initialize() -> void:
 		await process_frame
 		if bool(overlay.get("marble_gallery_open")):
 			failures.append("marble gallery should close from close button")
+		button.pressed.emit()
+		await process_frame
+		var close_event := InputEventMouseButton.new()
+		close_event.button_index = MOUSE_BUTTON_LEFT
+		close_event.pressed = true
+		close_event.position = (close_button.position + close_button.size * 0.5)
+		overlay._gui_input(close_event)
+		await process_frame
+		if bool(overlay.get("marble_gallery_open")):
+			failures.append("marble gallery should close from close button position")
 
 	overlay.queue_free()
 	await process_frame
